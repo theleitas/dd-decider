@@ -47,6 +47,14 @@ class Restaurant:
     menu_hint: str
 
 
+@dataclass(frozen=True)
+class SubmittedDiner:
+    name: str
+    profile: dict[str, int]
+    reasons: list[str]
+    types: tuple[str, ...]
+
+
 @dataclass
 class Score:
     value: int = 0
@@ -551,7 +559,11 @@ def calculate_diner_profile(diner_id: int, diner_name: str) -> tuple[dict[str, i
     profile: dict[str, int] = {}
     reasons: list[str] = []
 
-    selected_types = st.session_state.get(f"diner_{diner_id}_types", [])
+    selected_types = [
+        restaurant_type
+        for restaurant_type in TYPE_NAMES
+        if st.session_state.get(f"diner_{diner_id}_type_{restaurant_type}", False)
+    ]
     for restaurant_type in selected_types:
         profile = add_profiles(profile, RESTAURANT_TYPES[restaurant_type], multiplier=4)
 
@@ -645,13 +657,22 @@ def diner_form(diner_id: int, diner_name: str) -> tuple[dict[str, int], list[str
 
     with st.expander(label, expanded=is_editing):
         with st.form(f"diner_{diner_id}_form"):
-            st.multiselect(
-                "Pick 3 restaurant types",
-                TYPE_NAMES,
-                max_selections=3,
-                key=f"diner_{diner_id}_types",
-                help="This is the strongest preference signal. The photo picks fine-tune it.",
+            st.markdown("#### Pick 3 restaurant types")
+            picked_count = sum(
+                1 for restaurant_type in TYPE_NAMES if st.session_state.get(f"diner_{diner_id}_type_{restaurant_type}")
             )
+            type_columns = st.columns(3)
+            for index, restaurant_type in enumerate(TYPE_NAMES):
+                key = f"diner_{diner_id}_type_{restaurant_type}"
+                is_checked = st.session_state.get(key, False)
+                with type_columns[index % 3]:
+                    st.checkbox(
+                        restaurant_type,
+                        key=key,
+                        disabled=not is_checked and picked_count >= 3,
+                    )
+            st.caption("Pick up to 3. These carry the most weight.")
+
             st.radio(
                 "Dinner mood",
                 ["Tired", "Stressed", "Happy", "Restless", "Focused", "Indulgent"],
@@ -682,6 +703,8 @@ def diner_form(diner_id: int, diner_name: str) -> tuple[dict[str, int], list[str
             st.markdown("#### Quick photo picks")
             for index, question in enumerate(QUESTIONS, start=1):
                 with st.container(border=True):
+                    st.markdown('<div class="tight-photo-picks"></div>', unsafe_allow_html=True)
+                    st.caption(question.prompt)
                     cols = st.columns(3)
                     for column, option in zip(cols, question.options):
                         image_path = CHOICE_IMAGE_DIR / option.image
@@ -690,7 +713,6 @@ def diner_form(diner_id: int, diner_name: str) -> tuple[dict[str, int], list[str
                                 st.markdown('<div class="choice-img">', unsafe_allow_html=True)
                                 st.image(str(image_path), width="stretch")
                                 st.markdown("</div>", unsafe_allow_html=True)
-                            st.caption(option.label)
                     st.radio(
                         question.prompt,
                         [option.label for option in question.options],
@@ -701,10 +723,16 @@ def diner_form(diner_id: int, diner_name: str) -> tuple[dict[str, int], list[str
 
             if st.form_submit_button(f"Submit {diner_name}'s picks", width="stretch"):
                 profile, reasons = calculate_diner_profile(diner_id, diner_name)
+                selected_types = tuple(
+                    restaurant_type
+                    for restaurant_type in TYPE_NAMES
+                    if st.session_state.get(f"diner_{diner_id}_type_{restaurant_type}", False)
+                )
                 submitted_diners[diner_id] = {
                     "name": diner_name,
                     "profile": profile,
                     "reasons": reasons,
+                    "types": selected_types,
                 }
                 editing_diners[diner_id] = False
                 st.rerun()
@@ -796,6 +824,35 @@ def three_hits(restaurants: list[Restaurant], group_profile: dict[str, int], din
     ]
 
 
+def type_match_summary(submitted_diners: list[SubmittedDiner]) -> None:
+    type_counts: dict[str, int] = {}
+    for diner in submitted_diners:
+        for restaurant_type in diner.types:
+            type_counts[restaurant_type] = type_counts.get(restaurant_type, 0) + 1
+
+    shared_types = [
+        restaurant_type
+        for restaurant_type, _count in sorted(type_counts.items(), key=lambda item: (-item[1], item[0]))
+        if type_counts[restaurant_type] > 1
+    ]
+
+    st.markdown('<div class="type-summary">', unsafe_allow_html=True)
+    st.markdown("#### Group type overlap")
+    if shared_types:
+        st.markdown("".join(f'<span class="type-chip">{restaurant_type}</span>' for restaurant_type in shared_types), unsafe_allow_html=True)
+    else:
+        st.caption("No exact overlap yet; the app is looking for restaurants that bridge the individual picks.")
+
+    for diner in submitted_diners:
+        pieces = []
+        for restaurant_type in diner.types:
+            clean_type = restaurant_type.split(" ", 1)[1]
+            pieces.append(f"<mark>{clean_type}</mark>" if restaurant_type in shared_types else clean_type)
+        picks = ", ".join(pieces) if pieces else "no type picks"
+        st.markdown(f'<div class="diner-type-row"><strong>{diner.name}:</strong> {picks}</div>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
 page_icon = Image.open(BRAND_IMAGE_PATH) if BRAND_IMAGE_PATH.exists() else "🍽️"
 st.set_page_config(page_title="Leita Dining Decider", page_icon=page_icon, layout="centered")
 initialize_state()
@@ -835,6 +892,36 @@ st.markdown(
         border-radius: 10px;
         object-fit: cover;
         width: 100%;
+    }
+    div[data-testid="stVerticalBlock"]:has(.tight-photo-picks) div[data-testid="stRadio"] {
+        margin-top: -0.75rem;
+    }
+    div[data-testid="stVerticalBlock"]:has(.tight-photo-picks) div[data-testid="stRadio"] > label {
+        display: none;
+    }
+    .type-summary {
+        border: 1px solid rgba(128, 128, 128, 0.35);
+        border-radius: 10px;
+        margin-bottom: 0.75rem;
+        padding: 0.75rem;
+    }
+    .type-chip {
+        background: rgba(255, 75, 75, 0.14);
+        border: 1px solid rgba(255, 75, 75, 0.55);
+        border-radius: 999px;
+        display: inline-block;
+        font-size: 0.86rem;
+        font-weight: 700;
+        margin: 0.12rem 0.2rem 0.12rem 0;
+        padding: 0.12rem 0.5rem;
+    }
+    .diner-type-row {
+        font-size: 0.9rem;
+        margin-top: 0.2rem;
+    }
+    .diner-type-row mark {
+        border-radius: 999px;
+        padding: 0.05rem 0.32rem;
     }
     div[data-testid="stImage"] img {
         border-radius: 10px;
@@ -882,6 +969,7 @@ diner_names = st.session_state["diner_names"]
 group_profile: dict[str, int] = {}
 group_reasons: list[str] = []
 submitted_profiles: list[dict[str, int]] = []
+submitted_diner_models: list[SubmittedDiner] = []
 
 st.header("Diner picks")
 st.caption("Only submitted diners count toward the results.")
@@ -894,21 +982,26 @@ for diner in range(1, diner_count + 1):
     submitted = diner_form(diner, diner_name)
     if submitted:
         profile, reasons = submitted
+        submitted_record = st.session_state["submitted_diners"][diner]
         group_profile = add_profiles(group_profile, profile)
         group_reasons.extend(reasons)
         submitted_profiles.append(profile)
+        submitted_diner_models.append(
+            SubmittedDiner(
+                name=submitted_record["name"],
+                profile=profile,
+                reasons=reasons,
+                types=tuple(submitted_record.get("types", ())),
+            )
+        )
 
 restaurants = [infer_restaurant(name) for name in restaurant_names]
 
-st.header("Group hits")
+st.header("Results")
 if not submitted_profiles:
     st.info("Have at least one diner tap Submit before the app recommends restaurants.")
 else:
-    style_results = rank_food_styles(group_profile)
-    top_style, _style_score = style_results[0]
-    st.subheader(top_style.name)
-    st.write(top_style.description)
-    st.write(f"Food targets: {top_style.examples}.")
+    type_match_summary(submitted_diner_models)
 
     hits = three_hits(restaurants, group_profile, submitted_profiles)
     for title, explanation, restaurant, score in hits:
@@ -921,16 +1014,6 @@ else:
                 st.write(f"Types: {', '.join(restaurant_type.split(' ', 1)[1] for restaurant_type in restaurant.types)}")
             st.write(f"Likely menu: {restaurant.menu_hint}")
             st.write(f"Signals: {', '.join(restaurant.tags)}")
-
-    with st.expander("Why the app leaned this way"):
-        for reason in group_reasons[-12:]:
-            st.write(f"- {reason}")
-
-    with st.expander("Group taste profile"):
-        meaningful_traits = sorted(group_profile.items(), key=lambda item: item[1], reverse=True)
-        for trait, value in meaningful_traits:
-            if value > 0:
-                st.write(f"- {trait.replace('_', ' ')}: {value}")
 
 st.divider()
 with st.expander("Admin", expanded=False):

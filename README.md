@@ -11,8 +11,9 @@ familiar vs. adventurous vs. cheesy, and more. It combines only submitted diner
 answers into one group profile and recommends three restaurant hits from a saved
 DoorDash restaurant list:
 
-Each diner first picks up to three restaurant types. Those type picks carry the
-most weight, and the photo questions refine the group consensus.
+Each diner first picks up to three restaurant types from compact checkbox
+buttons. Those type picks carry the most weight, and the photo questions refine
+the group consensus.
 
 - Best consensus: everyone likely says yes.
 - Best craving match: strongest sensory fit.
