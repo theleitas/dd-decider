@@ -7,13 +7,13 @@ want yet.
 
 The app uses compact three-choice photo questions to turn vague cravings into a
 sensory profile: fresh vs. comforting vs. brothy, crispy vs. saucy vs. creamy,
-familiar vs. adventurous vs. cheesy, and more. It combines only submitted diner
+familiar vs. adventurous vs. upscale, and more. It combines only submitted diner
 answers into one group profile and recommends three restaurant hits from a saved
 DoorDash restaurant list:
 
-Each diner first picks up to three restaurant types from compact checkbox
-buttons. Those type picks carry the most weight, and the photo questions refine
-the group consensus.
+Each diner first picks up to three restaurant types from an 18-category,
+emoji-labeled food type list. Those type picks carry the most weight, and the
+photo questions refine the group consensus.
 
 - Best consensus: everyone likely says yes.
 - Best craving match: strongest sensory fit.
@@ -38,6 +38,8 @@ The bottom Admin section controls setup:
 - Restaurant profiles are inferred from name, cuisine keywords, and any pasted
   menu hints.
 - Restaurant types are re-inferred every time the Admin restaurant list changes.
+- When the Admin restaurant list is saved, the app does a best-effort lookup for
+  small restaurant logos and displays cached logos on final result cards.
 - The Leita Dining Decider image is used at the top of the page and as the app
   icon where Streamlit supports it.
 

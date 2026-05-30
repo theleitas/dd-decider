@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import base64
+import concurrent.futures
 import csv
+import hashlib
+import html
 import io
 import json
 import re
+import urllib.error
+import urllib.parse
+import urllib.request
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -20,10 +26,14 @@ from PIL import Image
 
 DATA_DIR = Path("data")
 RESTAURANT_LIST_PATH = DATA_DIR / "restaurants.txt"
+LOGO_INDEX_PATH = DATA_DIR / "restaurant_logos.json"
 SHARED_STATE_PATH = DATA_DIR / "shared_state.json"
 SHARED_STATE_LOCK_PATH = DATA_DIR / "shared_state.lock"
 CHOICE_IMAGE_DIR = Path("assets/food_choices")
+LOGO_DIR = Path("assets/restaurant_logos")
 BRAND_IMAGE_PATH = Path("assets/brand/leita-dining-decider.jpg")
+HTTP_HEADERS = {"User-Agent": "LeitaDiningDecider/1.0"}
+SHARED_STATE_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -108,7 +118,7 @@ QUESTIONS = [
         (
             Option("Familiar", {"familiar": 5, "comfort": 2, "fast": 1}, "q07_a.jpg"),
             Option("Adventurous", {"adventurous": 5, "spicy": 1, "umami": 1}, "q07_b.jpg"),
-            Option("Cheesy", {"cheesy": 5, "comfort": 3, "indulgent": 2}, "q07_c.jpg"),
+            Option("Upscale", {"upscale": 6, "premium": 5, "special": 4, "adventurous": 1}, "q07_c_upscale.jpg"),
         ),
     ),
     Question(
@@ -123,19 +133,24 @@ QUESTIONS = [
 
 
 RESTAURANT_TYPES = {
-    "🇲🇽 Mexican": {"type_mexican": 14, "spicy": 2, "handheld": 2, "bowl": 1},
-    "🍝 Italian": {"type_italian": 14, "carby": 3, "saucy": 2, "comfort": 2},
-    "🍔 Burgers": {"type_burgers": 14, "beef": 4, "handheld": 2, "indulgent": 2},
-    "🥙 Greek": {"type_greek": 14, "fresh": 3, "acidic": 2, "protein": 2, "vegetable": 2},
-    "🌶️ Thai": {"type_thai": 14, "spicy": 3, "fresh": 2, "saucy": 2, "adventurous": 1},
-    "🍟 Fast Food": {"type_fast_food": 14, "fast": 5, "familiar": 2, "budget": 2},
-    "🍕 Pizza": {"type_pizza": 14, "carby": 3, "cheesy": 4, "shareable": 2},
-    "🍣 Japanese": {"type_japanese": 14, "fresh": 2, "umami": 3, "brothy": 1, "premium": 1},
-    "🥡 Chinese": {"type_chinese": 14, "umami": 3, "saucy": 2, "shareable": 2},
-    "🔥 Grill": {"type_grill": 14, "smoky": 5, "protein": 3, "hearty": 2},
-    "🍽️ American": {"type_american": 14, "familiar": 4, "comfort": 2, "fast": 1},
-    "🍳 Breakfast": {"type_breakfast": 14, "breakfast": 5, "comfort": 2, "familiar": 2},
-    "🥪 Subs": {"type_subs": 14, "sandwich": 5, "handheld": 4, "fast": 2},
+    "🍟 Fast Food Burgers": {"type_fast_food_burgers": 14, "burger": 5, "beef": 3, "fast": 5, "budget": 3, "handheld": 3, "familiar": 3},
+    "🍔 Premium Burgers": {"type_premium_burgers": 14, "burger": 6, "beef": 4, "premium": 4, "upscale": 2, "indulgent": 4, "handheld": 3},
+    "🍗 Fried Chicken": {"type_fried_chicken": 14, "chicken": 6, "crunchy": 5, "fast": 3, "comfort": 4, "indulgent": 3},
+    "🔥 Chicken Wings": {"type_chicken_wings": 14, "wing": 7, "chicken": 6, "shareable": 5, "spicy": 3, "crunchy": 3},
+    "🍕 Pizza": {"type_pizza": 14, "carby": 3, "cheesy": 4, "shareable": 3, "familiar": 2},
+    "🌮 Mexican": {"type_mexican": 14, "spicy": 2, "handheld": 2, "bowl": 2, "budget": 2},
+    "🍝 Italian": {"type_italian": 14, "carby": 3, "saucy": 2, "comfort": 2, "upscale": 1},
+    "🥡 Chinese": {"type_chinese": 14, "umami": 3, "saucy": 2, "shareable": 3, "sweet_savory": 2},
+    "🍣 Japanese, Sushi & Hibachi": {"type_japanese_sushi_hibachi": 14, "fresh": 2, "umami": 3, "brothy": 1, "premium": 2, "seafood": 2},
+    "🌶️ Thai & Asian": {"type_thai_asian": 14, "spicy": 3, "fresh": 2, "saucy": 2, "adventurous": 2, "umami": 2},
+    "🦐 Seafood": {"type_seafood": 14, "seafood": 7, "premium": 2, "fresh": 3, "light": 2},
+    "🍳 Breakfast & Brunch": {"type_breakfast_brunch": 14, "breakfast": 6, "comfort": 2, "familiar": 2, "fresh": 1},
+    "🥪 Sandwiches & Deli": {"type_sandwiches_deli": 14, "sandwich": 6, "handheld": 5, "fast": 3, "familiar": 3},
+    "🍖 Southern Comfort Food": {"type_southern_comfort": 14, "comfort": 6, "hearty": 4, "indulgent": 3, "chicken": 2, "familiar": 3},
+    "🍽️ American Casual": {"type_american_casual": 14, "familiar": 5, "comfort": 3, "fast": 1, "variety": 2},
+    "♨️ Barbecue": {"type_barbecue": 14, "smoky": 6, "hearty": 5, "protein": 4, "pork": 3, "beef": 2},
+    "🍛 Indian": {"type_indian": 14, "spicy": 4, "saucy": 4, "comfort": 3, "hearty": 3, "adventurous": 2},
+    "🥙 Mediterranean & Greek": {"type_mediterranean_greek": 14, "fresh": 4, "acidic": 3, "protein": 2, "vegetable": 3, "light": 2},
 }
 
 
@@ -164,16 +179,16 @@ HARD_NO_TRAITS = {
     "Soup/broth": {"soup": -7, "brothy": -7},
     "Salads": {"salad": -8, "fresh": -2, "light": -2},
     "Breakfast food": {"breakfast": -8},
-    "Fast food": {"type_fast_food": -10, "fast": -4},
+    "Fast food": {"type_fast_food_burgers": -10, "type_fried_chicken": -6, "fast": -4},
     "Pizza": {"type_pizza": -10, "pizza": -8, "cheesy": -2},
-    "Burgers": {"type_burgers": -10, "burger": -8, "beef": -3},
+    "Burgers": {"type_fast_food_burgers": -10, "type_premium_burgers": -10, "burger": -8, "beef": -3},
     "Mexican": {"type_mexican": -10, "spicy": -1},
     "Italian": {"type_italian": -10, "carby": -2, "saucy": -1},
     "Chinese": {"type_chinese": -10, "umami": -1},
-    "Japanese": {"type_japanese": -10, "raw_fish": -2, "seafood": -1},
-    "Thai": {"type_thai": -10, "spicy": -2, "saucy": -1},
-    "Greek/Mediterranean": {"type_greek": -10, "fresh": -1, "acidic": -1},
-    "BBQ/grill": {"type_grill": -10, "smoky": -6},
+    "Japanese": {"type_japanese_sushi_hibachi": -10, "raw_fish": -2, "seafood": -1},
+    "Thai": {"type_thai_asian": -10, "spicy": -2, "saucy": -1},
+    "Greek/Mediterranean": {"type_mediterranean_greek": -10, "fresh": -1, "acidic": -1},
+    "BBQ/grill": {"type_barbecue": -10, "smoky": -6},
     "Expensive": {"premium": -5, "budget": 4},
     "Too adventurous": {"adventurous": -5, "familiar": 3},
 }
@@ -349,38 +364,43 @@ KNOWN_RESTAURANTS = {
 
 
 KNOWN_RESTAURANT_TYPES = {
-    "chicken salad chick": ("🍽️ American", "🥪 Subs"),
-    "chick-fil-a": ("🍟 Fast Food", "🍽️ American"),
-    "panera": ("🍽️ American", "🥪 Subs", "🍳 Breakfast"),
-    "cava": ("🥙 Greek",),
-    "sweetgreen": ("🍽️ American",),
-    "chipotle": ("🇲🇽 Mexican", "🍟 Fast Food"),
-    "jersey mike": ("🥪 Subs",),
-    "subway": ("🥪 Subs", "🍟 Fast Food"),
-    "tropical smoothie": ("🍽️ American", "🥪 Subs"),
-    "first watch": ("🍳 Breakfast", "🍽️ American"),
-    "panda express": ("🥡 Chinese", "🍟 Fast Food"),
-    "five guys": ("🍔 Burgers", "🍟 Fast Food", "🍽️ American"),
-    "shake shack": ("🍔 Burgers", "🍟 Fast Food", "🍽️ American"),
-    "wingstop": ("🍟 Fast Food", "🍽️ American"),
-    "zaxby": ("🍟 Fast Food", "🍽️ American"),
+    "chicken salad chick": ("🥪 Sandwiches & Deli", "🍽️ American Casual"),
+    "chick-fil-a": ("🍗 Fried Chicken", "🥪 Sandwiches & Deli", "🍽️ American Casual"),
+    "panera": ("🥪 Sandwiches & Deli", "🍳 Breakfast & Brunch", "🍽️ American Casual"),
+    "cava": ("🥙 Mediterranean & Greek",),
+    "sweetgreen": ("🍽️ American Casual",),
+    "chipotle": ("🌮 Mexican",),
+    "jersey mike": ("🥪 Sandwiches & Deli",),
+    "subway": ("🥪 Sandwiches & Deli",),
+    "tropical smoothie": ("🥪 Sandwiches & Deli", "🍽️ American Casual"),
+    "first watch": ("🍳 Breakfast & Brunch", "🍽️ American Casual"),
+    "panda express": ("🥡 Chinese", "🌶️ Thai & Asian"),
+    "five guys": ("🍟 Fast Food Burgers", "🍽️ American Casual"),
+    "shake shack": ("🍔 Premium Burgers", "🍽️ American Casual"),
+    "wingstop": ("🔥 Chicken Wings", "🍽️ American Casual"),
+    "zaxby": ("🍗 Fried Chicken", "🔥 Chicken Wings", "🍽️ American Casual"),
 }
 
 
 TYPE_KEYWORDS = {
-    "🇲🇽 Mexican": ["mexican", "taco", "burrito", "quesadilla", "taqueria", "cantina", "chipotle", "salsa"],
-    "🍝 Italian": ["italian", "pasta", "trattoria", "risotto", "parm", "lasagna"],
-    "🍔 Burgers": ["burger", "burgers", "five guys", "shake shack"],
-    "🥙 Greek": ["greek", "gyro", "falafel", "shawarma", "hummus", "pita", "mediterranean", "kebab", "kebob"],
-    "🌶️ Thai": ["thai", "pad thai", "curry", "basil", "lemongrass"],
-    "🍟 Fast Food": ["express", "fast", "drive", "mcdonald", "wendy", "taco bell", "popeyes", "kfc", "zaxby"],
+    "🍟 Fast Food Burgers": ["mcdonald", "wendy", "burger king", "whataburger", "sonic", "five guys", "cook out"],
+    "🍔 Premium Burgers": ["shake shack", "burgerfi", "smashburger", "bad daddy", "burger boutique", "gourmet burger"],
+    "🍗 Fried Chicken": ["chick-fil-a", "popeyes", "kfc", "zaxby", "bojangles", "raising cane", "fried chicken", "chicken finger", "chicken tender"],
+    "🔥 Chicken Wings": ["wing", "wings", "wingstop", "buffalo wild", "wild wing", "hot wing"],
     "🍕 Pizza": ["pizza", "pizzeria"],
-    "🍣 Japanese": ["japanese", "sushi", "ramen", "hibachi", "teriyaki", "poke", "udon"],
+    "🌮 Mexican": ["mexican", "taco", "burrito", "quesadilla", "taqueria", "cantina", "chipotle", "salsa"],
+    "🍝 Italian": ["italian", "pasta", "trattoria", "risotto", "parm", "lasagna"],
     "🥡 Chinese": ["chinese", "wok", "szechuan", "sichuan", "dumpling", "fried rice", "panda"],
-    "🔥 Grill": ["grill", "grille", "bbq", "barbecue", "steak", "smokehouse", "kebab", "kebob"],
-    "🍽️ American": ["american", "diner", "chicken salad", "wing", "wings", "chicken", "bar", "cafe"],
-    "🍳 Breakfast": ["breakfast", "brunch", "egg", "pancake", "waffle", "biscuit", "first watch"],
-    "🥪 Subs": ["sub", "subs", "sandwich", "deli", "hoagie", "jersey mike", "subway"],
+    "🍣 Japanese, Sushi & Hibachi": ["japanese", "sushi", "ramen", "hibachi", "teriyaki", "poke", "udon", "bento"],
+    "🌶️ Thai & Asian": ["thai", "pad thai", "curry", "basil", "lemongrass", "vietnam", "pho", "banh", "korean", "asian"],
+    "🦐 Seafood": ["seafood", "fish", "shrimp", "crab", "lobster", "oyster", "poke"],
+    "🍳 Breakfast & Brunch": ["breakfast", "brunch", "egg", "pancake", "waffle", "biscuit", "first watch"],
+    "🥪 Sandwiches & Deli": ["sub", "subs", "sandwich", "deli", "hoagie", "jersey mike", "subway", "panera", "chicken salad"],
+    "🍖 Southern Comfort Food": ["southern", "soul food", "comfort", "meatloaf", "country", "cracker barrel", "bojangles"],
+    "🍽️ American Casual": ["american", "diner", "bar", "cafe", "grill", "grille", "tavern", "applebee", "chili", "tgi friday"],
+    "♨️ Barbecue": ["bbq", "barbecue", "smokehouse", "smoked", "brisket", "ribs"],
+    "🍛 Indian": ["indian", "curry", "biryani", "tandoor", "masala", "naan", "punjab", "bombay"],
+    "🥙 Mediterranean & Greek": ["greek", "gyro", "falafel", "shawarma", "hummus", "pita", "mediterranean", "kebab", "kebob", "cava"],
 }
 
 
@@ -467,6 +487,150 @@ def load_restaurant_names() -> list[str]:
     return SAMPLE_RESTAURANTS
 
 
+KNOWN_RESTAURANT_DOMAINS = {
+    "chicken salad chick": "https://www.chickensaladchick.com",
+    "chick-fil-a": "https://www.chick-fil-a.com",
+    "panera": "https://www.panerabread.com",
+    "cava": "https://www.cava.com",
+    "sweetgreen": "https://www.sweetgreen.com",
+    "chipotle": "https://www.chipotle.com",
+    "jersey mike": "https://www.jerseymikes.com",
+    "subway": "https://www.subway.com",
+    "tropical smoothie": "https://www.tropicalsmoothiecafe.com",
+    "first watch": "https://www.firstwatch.com",
+    "panda express": "https://www.pandaexpress.com",
+    "five guys": "https://www.fiveguys.com",
+    "shake shack": "https://www.shakeshack.com",
+    "wingstop": "https://www.wingstop.com",
+    "zaxby": "https://www.zaxbys.com",
+}
+
+
+BLOCKED_LOGO_DOMAINS = (
+    "doordash.com",
+    "ubereats.com",
+    "grubhub.com",
+    "yelp.com",
+    "tripadvisor.com",
+    "facebook.com",
+    "instagram.com",
+    "tiktok.com",
+    "wikipedia.org",
+)
+
+
+def load_logo_index() -> dict[str, str]:
+    if not LOGO_INDEX_PATH.exists():
+        return {}
+    try:
+        raw_index = json.loads(LOGO_INDEX_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    return {str(name): str(path) for name, path in raw_index.items()} if isinstance(raw_index, dict) else {}
+
+
+def save_logo_index(index: dict[str, str]) -> None:
+    DATA_DIR.mkdir(exist_ok=True)
+    LOGO_INDEX_PATH.write_text(json.dumps(index, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def restaurant_slug(name: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    digest = hashlib.sha1(name.lower().encode("utf-8")).hexdigest()[:8]
+    return f"{slug or 'restaurant'}-{digest}"
+
+
+def request_bytes(url: str, timeout: float = 4.0) -> bytes | None:
+    request = urllib.request.Request(url, headers=HTTP_HEADERS)
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            if response.status >= 400:
+                return None
+            return response.read(500_000)
+    except (OSError, urllib.error.URLError, TimeoutError):
+        return None
+
+
+def known_restaurant_domain(name: str) -> str | None:
+    lower_name = name.lower()
+    for known_name, domain in KNOWN_RESTAURANT_DOMAINS.items():
+        if known_name in lower_name:
+            return domain
+    return None
+
+
+def restaurant_homepage_from_search(name: str) -> str | None:
+    query = urllib.parse.urlencode({"q": f"{name} restaurant official site"})
+    html_bytes = request_bytes(f"https://duckduckgo.com/html/?{query}", timeout=5.0)
+    if not html_bytes:
+        return None
+
+    page = html.unescape(html_bytes.decode("utf-8", errors="ignore"))
+    matches = re.findall(r'href="[^"]*uddg=([^"&]+)', page)
+    for match in matches:
+        candidate = urllib.parse.unquote(match)
+        domain = urllib.parse.urlparse(candidate).netloc.lower()
+        if domain.startswith("www."):
+            domain = domain[4:]
+        if domain and not any(blocked in domain for blocked in BLOCKED_LOGO_DOMAINS):
+            return candidate
+    return None
+
+
+def cache_logo_for_restaurant(name: str) -> str | None:
+    logo_path = LOGO_DIR / f"{restaurant_slug(name)}.png"
+    if logo_path.exists():
+        return str(logo_path)
+
+    homepage = known_restaurant_domain(name) or restaurant_homepage_from_search(name)
+    if not homepage:
+        return None
+
+    LOGO_DIR.mkdir(parents=True, exist_ok=True)
+    favicon_url = "https://www.google.com/s2/favicons?" + urllib.parse.urlencode(
+        {"domain_url": homepage, "sz": "128"}
+    )
+    logo_bytes = request_bytes(favicon_url, timeout=4.0)
+    if not logo_bytes or len(logo_bytes) < 200:
+        return None
+
+    logo_path.write_bytes(logo_bytes)
+    return str(logo_path)
+
+
+def update_restaurant_logos(names: list[str]) -> int:
+    index = load_logo_index()
+    pending_names = [name for name in names if not index.get(name) or not Path(index[name]).exists()]
+    found_count = 0
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
+        futures = {
+            executor.submit(cache_logo_for_restaurant, name): name
+            for name in pending_names[:80]
+        }
+        for future in concurrent.futures.as_completed(futures):
+            name = futures[future]
+            try:
+                logo_path = future.result()
+            except Exception:
+                logo_path = None
+            if logo_path:
+                index[name] = logo_path
+                found_count += 1
+
+    if found_count:
+        save_logo_index(index)
+    return found_count
+
+
+def restaurant_logo_path(name: str) -> Path | None:
+    logo_path = load_logo_index().get(name)
+    if logo_path and Path(logo_path).exists():
+        return Path(logo_path)
+    fallback_path = LOGO_DIR / f"{restaurant_slug(name)}.png"
+    return fallback_path if fallback_path.exists() else None
+
+
 def restaurant_text_value(names: list[str]) -> str:
     return "\n".join(names)
 
@@ -546,8 +710,8 @@ def infer_restaurant(raw_name: str) -> Restaurant:
         profile = add_profiles(profile, {"balanced": 2, "individual": 1})
         menu_hints.append("general delivery menu; needs richer menu data")
     if not restaurant_types:
-        restaurant_types = ("🍽️ American",)
-        profile = add_profiles(profile, RESTAURANT_TYPES["🍽️ American"])
+        restaurant_types = ("🍽️ American Casual",)
+        profile = add_profiles(profile, RESTAURANT_TYPES["🍽️ American Casual"])
 
     return Restaurant(
         name=name,
@@ -564,6 +728,7 @@ def default_diner_names() -> list[str]:
 
 def default_shared_state() -> dict:
     return {
+        "version": SHARED_STATE_VERSION,
         "diner_count": 3,
         "diner_names": default_diner_names(),
         "submitted_diners": {},
@@ -627,10 +792,15 @@ def normalize_shared_state(raw_state: object) -> dict:
         name = names[index] if index < len(names) else fallback
         diner_names.append(str(name).strip() or fallback)
 
+    submitted_diners = normalize_submitted_diners(raw_state.get("submitted_diners", {}))
+    if raw_state.get("version") != SHARED_STATE_VERSION:
+        submitted_diners = {}
+
     return {
+        "version": SHARED_STATE_VERSION,
         "diner_count": diner_count,
         "diner_names": diner_names,
-        "submitted_diners": normalize_submitted_diners(raw_state.get("submitted_diners", {})),
+        "submitted_diners": submitted_diners,
     }
 
 
@@ -710,11 +880,8 @@ def reset_diner_choices() -> None:
 
 
 def selected_restaurant_types(diner_id: int) -> tuple[str, ...]:
-    return tuple(
-        restaurant_type
-        for restaurant_type in TYPE_NAMES
-        if st.session_state.get(f"diner_{diner_id}_type_{restaurant_type}", False)
-    )
+    selected = st.session_state.get(f"diner_{diner_id}_types", [])
+    return tuple(restaurant_type for restaurant_type in selected if restaurant_type in TYPE_NAMES)[:3]
 
 
 def calculate_diner_profile(diner_id: int, diner_name: str) -> tuple[dict[str, int], list[str]]:
@@ -800,20 +967,15 @@ def diner_form(diner_id: int, diner_name: str) -> tuple[dict[str, int], list[str
     with st.expander(label, expanded=is_editing):
         with st.form(f"diner_{diner_id}_form"):
             st.markdown("#### Pick 3 restaurant types")
-            picked_count = sum(
-                1 for restaurant_type in TYPE_NAMES if st.session_state.get(f"diner_{diner_id}_type_{restaurant_type}")
+            st.multiselect(
+                "Restaurant type picks",
+                TYPE_NAMES,
+                key=f"diner_{diner_id}_types",
+                max_selections=3,
+                label_visibility="collapsed",
+                placeholder="Choose up to 3 food types",
             )
-            type_columns = st.columns(3)
-            for index, restaurant_type in enumerate(TYPE_NAMES):
-                key = f"diner_{diner_id}_type_{restaurant_type}"
-                is_checked = st.session_state.get(key, False)
-                with type_columns[index % 3]:
-                    st.checkbox(
-                        restaurant_type,
-                        key=key,
-                        disabled=not is_checked and picked_count >= 3,
-                    )
-            st.caption("Pick up to 3. These carry the most weight.")
+            st.caption("Choose up to 3. These carry the most weight.")
 
             st.radio(
                 "Dinner mood",
@@ -928,6 +1090,8 @@ def wildcard_match(
         curiosity_bonus = (
             restaurant.profile.get("adventurous", 0) * 8
             + restaurant.profile.get("premium", 0) * 4
+            + restaurant.profile.get("upscale", 0) * 5
+            + restaurant.profile.get("special", 0) * 4
             + restaurant.profile.get("variety", 0) * 5
             + restaurant.profile.get("spicy", 0) * 2
         )
@@ -1143,7 +1307,15 @@ else:
     for title, explanation, restaurant, score in hits:
         with st.container(border=True):
             st.markdown(f"#### {title}")
-            st.subheader(restaurant.name)
+            logo_path = restaurant_logo_path(restaurant.name)
+            if logo_path:
+                logo_column, name_column = st.columns([1, 5], vertical_alignment="center")
+                with logo_column:
+                    st.image(str(logo_path), width=56)
+                with name_column:
+                    st.subheader(restaurant.name)
+            else:
+                st.subheader(restaurant.name)
             st.caption(explanation)
             st.write(f"Match score: {score}")
             if restaurant.types:
@@ -1194,7 +1366,9 @@ if st.session_state["admin_open"]:
                     st.error("I could not find restaurant names in the pasted list.")
                 else:
                     save_restaurant_names(names)
-                    st.success(f"Saved {len(names)} restaurants.")
+                    with st.spinner("Saving restaurants and checking for logos..."):
+                        logo_count = update_restaurant_logos(names)
+                    st.success(f"Saved {len(names)} restaurants. Cached {logo_count} new logos.")
 
                     persist_admin_settings(
                         int(updated_count),

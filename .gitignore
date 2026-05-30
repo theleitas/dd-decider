@@ -1,6 +1,8 @@
 .pycache/
 __pycache__/
 .venv/
+assets/restaurant_logos/
+data/restaurant_logos.json
 data/shared_state.json
 data/shared_state.json.tmp
 data/shared_state.lock
