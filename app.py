@@ -96,27 +96,11 @@ QUESTIONS = [
         ),
     ),
     Question(
-        "What food format has the right vibe?",
-        (
-            Option("Handheld", {"handheld": 5, "fast": 3, "familiar": 1}, "q04_a.jpg"),
-            Option("Bowl", {"bowl": 4, "saucy": 2, "balanced": 2}, "q04_b.jpg"),
-            Option("Small bites", {"snacky": 5, "variety": 3, "shareable": 2}, "q04_c.jpg"),
-        ),
-    ),
-    Question(
         "Where should the meal get its weight?",
         (
             Option("Carby", {"carby": 5, "comfort": 3, "hearty": 2}, "q05_a.jpg"),
             Option("Protein", {"protein": 5, "balanced": 2, "hearty": 1}, "q05_b.jpg"),
             Option("Veggie-heavy", {"vegetable": 5, "fresh": 3, "balanced": 4, "light": 2}, "q05_c.jpg"),
-        ),
-    ),
-    Question(
-        "How do you want to feel after?",
-        (
-            Option("Light", {"light": 5, "fresh": 3, "balanced": 2}, "q06_a.jpg"),
-            Option("Indulgent", {"indulgent": 5, "hearty": 4, "comfort": 2}, "q06_b.jpg"),
-            Option("Brunchy", {"breakfast": 5, "comfort": 3, "familiar": 2}, "q06_c.jpg"),
         ),
     ),
     Question(
@@ -133,14 +117,6 @@ QUESTIONS = [
             Option("Glazed", {"sweet_savory": 5, "umami": 3, "comfort": 1}, "q08_a.jpg"),
             Option("Herby", {"acidic": 5, "fresh": 3, "light": 1}, "q08_b.jpg"),
             Option("Garlicky", {"garlic": 5, "umami": 3, "saucy": 1}, "q08_c.jpg"),
-        ),
-    ),
-    Question(
-        "What is the ordering strategy?",
-        (
-            Option("Reliable", {"fast": 5, "budget": 4, "familiar": 2}, "q09_a.jpg"),
-            Option("Special", {"premium": 5, "adventurous": 2, "indulgent": 1}, "q09_b.jpg"),
-            Option("Sweet finish", {"dessert": 5, "sweet_savory": 3, "indulgent": 2}, "q09_c.jpg"),
         ),
     ),
 ]
