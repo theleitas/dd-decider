@@ -1,13 +1,13 @@
-# dd-decider
+# Leita Dining Decider
 
-DoorDash lunch/dinner decider.
+Group dinner decider for DoorDash nights.
 
 This Streamlit app helps a group choose dinner when nobody can name what they
 want yet.
 
-The app uses compact photo-based "this or that" choices to turn vague cravings
-into a sensory profile: fresh vs. comforting, crispy vs. saucy, familiar vs.
-adventurous, reliable vs. special, and more. It combines only submitted diner
+The app uses compact three-choice photo questions to turn vague cravings into a
+sensory profile: fresh vs. comforting vs. brothy, crispy vs. saucy vs. creamy,
+familiar vs. adventurous vs. cheesy, and more. It combines only submitted diner
 answers into one group profile and recommends three restaurant hits from a saved
 DoorDash restaurant list:
 
@@ -23,10 +23,13 @@ The bottom Admin section controls setup:
 - Diner names and number of diners are customizable there too.
 - Diner cards start collapsed, can be reopened and resubmitted, and only count
   after that diner taps submit.
+- Submitted diners show a completed state and can edit their choices.
 - The reset button clears diner choices without touching the saved restaurant
   list.
 - Restaurant profiles are inferred from name, cuisine keywords, and any pasted
   menu hints.
+- The Leita Dining Decider image is used at the top of the page and as the app
+  icon where Streamlit supports it.
 
 Future versions can replace the name-based matcher with richer DoorDash/menu
 metadata, pricing, ratings, delivery time, and restaurant photos.

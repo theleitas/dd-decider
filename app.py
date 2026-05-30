@@ -7,25 +7,26 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import streamlit as st
+from PIL import Image
 
 
 DATA_DIR = Path("data")
 RESTAURANT_LIST_PATH = DATA_DIR / "restaurants.txt"
-QUESTION_IMAGE_DIR = Path("assets/food_questions")
+CHOICE_IMAGE_DIR = Path("assets/food_choices")
+BRAND_IMAGE_PATH = Path("assets/brand/leita-dining-decider.jpg")
 
 
 @dataclass(frozen=True)
 class Option:
     label: str
     traits: dict[str, int]
+    image: str
 
 
 @dataclass(frozen=True)
 class Question:
     prompt: str
-    image: str
-    left: Option
-    right: Option
+    options: tuple[Option, Option, Option]
 
 
 @dataclass(frozen=True)
@@ -53,63 +54,75 @@ class Score:
 QUESTIONS = [
     Question(
         "Which one feels more right for dinner?",
-        "01_comfort_fresh.png",
-        Option("Cozy and grounding", {"comfort": 5, "hearty": 3, "familiar": 1}),
-        Option("Bright and fresh", {"fresh": 5, "light": 3, "acidic": 2}),
+        (
+            Option("Cozy", {"comfort": 5, "hearty": 3, "familiar": 1}, "q01_a.jpg"),
+            Option("Fresh", {"fresh": 5, "light": 3, "acidic": 2}, "q01_b.jpg"),
+            Option("Brothy", {"brothy": 5, "comfort": 2, "umami": 2, "light": 1}, "q01_c.jpg"),
+        ),
     ),
     Question(
         "What texture are you chasing?",
-        "02_crispy_saucy.png",
-        Option("Crispy, crunchy, handheld", {"crunchy": 5, "fast": 2, "handheld": 3}),
-        Option("Soft, saucy, fork-and-bowl", {"saucy": 5, "comfort": 2, "umami": 2}),
+        (
+            Option("Crispy", {"crunchy": 5, "fast": 2, "handheld": 3}, "q02_a.jpg"),
+            Option("Saucy", {"saucy": 5, "comfort": 2, "umami": 2}, "q02_b.jpg"),
+            Option("Creamy", {"creamy": 5, "comfort": 3, "saucy": 2, "indulgent": 2}, "q02_c.jpg"),
+        ),
     ),
     Question(
         "What kind of flavor energy sounds better?",
-        "03_spicy_savory.png",
-        Option("Spicy and tangy", {"spicy": 5, "acidic": 3, "adventurous": 1}),
-        Option("Gentle and savory", {"umami": 4, "comfort": 2, "familiar": 2}),
+        (
+            Option("Spicy", {"spicy": 5, "acidic": 3, "adventurous": 1}, "q03_a.jpg"),
+            Option("Savory", {"umami": 4, "comfort": 2, "familiar": 2}, "q03_b.jpg"),
+            Option("Smoky", {"smoky": 5, "hearty": 3, "protein": 2}, "q03_c.jpg"),
+        ),
     ),
     Question(
         "What food format has the right vibe?",
-        "04_handheld_bowl.png",
-        Option("Handheld and easy", {"handheld": 5, "fast": 3, "familiar": 1}),
-        Option("Bowl or plate", {"bowl": 4, "saucy": 2, "balanced": 2}),
+        (
+            Option("Handheld", {"handheld": 5, "fast": 3, "familiar": 1}, "q04_a.jpg"),
+            Option("Bowl", {"bowl": 4, "saucy": 2, "balanced": 2}, "q04_b.jpg"),
+            Option("Small bites", {"snacky": 5, "variety": 3, "shareable": 2}, "q04_c.jpg"),
+        ),
     ),
     Question(
         "Where should the meal get its weight?",
-        "05_carby_protein.png",
-        Option("Carby and comforting", {"carby": 5, "comfort": 3, "hearty": 2}),
-        Option("Protein-forward", {"protein": 5, "balanced": 2, "hearty": 1}),
+        (
+            Option("Carby", {"carby": 5, "comfort": 3, "hearty": 2}, "q05_a.jpg"),
+            Option("Protein", {"protein": 5, "balanced": 2, "hearty": 1}, "q05_b.jpg"),
+            Option("Veggie-heavy", {"vegetable": 5, "fresh": 3, "balanced": 4, "light": 2}, "q05_c.jpg"),
+        ),
     ),
     Question(
         "How do you want to feel after?",
-        "06_light_indulgent.png",
-        Option("Light and clean", {"light": 5, "fresh": 3, "balanced": 2}),
-        Option("Indulgent and satisfied", {"indulgent": 5, "hearty": 4, "comfort": 2}),
+        (
+            Option("Light", {"light": 5, "fresh": 3, "balanced": 2}, "q06_a.jpg"),
+            Option("Indulgent", {"indulgent": 5, "hearty": 4, "comfort": 2}, "q06_b.jpg"),
+            Option("Brunchy", {"breakfast": 5, "comfort": 3, "familiar": 2}, "q06_c.jpg"),
+        ),
     ),
     Question(
         "Tonight is more of a...",
-        "07_familiar_adventurous.png",
-        Option("Familiar favorite", {"familiar": 5, "comfort": 2, "fast": 1}),
-        Option("Little adventure", {"adventurous": 5, "spicy": 1, "umami": 1}),
+        (
+            Option("Familiar", {"familiar": 5, "comfort": 2, "fast": 1}, "q07_a.jpg"),
+            Option("Adventurous", {"adventurous": 5, "spicy": 1, "umami": 1}, "q07_b.jpg"),
+            Option("Cheesy", {"cheesy": 5, "comfort": 3, "indulgent": 2}, "q07_c.jpg"),
+        ),
     ),
     Question(
         "Which flavor finish sounds better?",
-        "08_glazed_herby.png",
-        Option("Sweet-savory and glazed", {"sweet_savory": 5, "umami": 3, "comfort": 1}),
-        Option("Acidic, herby, and zippy", {"acidic": 5, "fresh": 3, "light": 1}),
-    ),
-    Question(
-        "What kind of table are you imagining?",
-        "09_shareable_individual.png",
-        Option("Shareable spread", {"shareable": 5, "social": 3, "variety": 2}),
-        Option("My own perfect order", {"individual": 5, "focused": 2, "balanced": 1}),
+        (
+            Option("Glazed", {"sweet_savory": 5, "umami": 3, "comfort": 1}, "q08_a.jpg"),
+            Option("Herby", {"acidic": 5, "fresh": 3, "light": 1}, "q08_b.jpg"),
+            Option("Garlicky", {"garlic": 5, "umami": 3, "saucy": 1}, "q08_c.jpg"),
+        ),
     ),
     Question(
         "What is the ordering strategy?",
-        "10_reliable_special.png",
-        Option("Fast, cheap, reliable", {"fast": 5, "budget": 4, "familiar": 2}),
-        Option("Special treat", {"premium": 5, "adventurous": 2, "indulgent": 1}),
+        (
+            Option("Reliable", {"fast": 5, "budget": 4, "familiar": 2}, "q09_a.jpg"),
+            Option("Special", {"premium": 5, "adventurous": 2, "indulgent": 1}, "q09_b.jpg"),
+            Option("Sweet finish", {"dessert": 5, "sweet_savory": 3, "indulgent": 2}, "q09_c.jpg"),
+        ),
     ),
 ]
 
@@ -119,55 +132,55 @@ FOOD_STYLES = [
         "Thai or Vietnamese",
         "Bright, aromatic, saucy when needed, and great for fresh-spicy cravings.",
         "pad see ew, pho, banh mi, vermicelli bowls, green curry",
-        {"fresh": 4, "spicy": 3, "adventurous": 3, "light": 2, "acidic": 3, "saucy": 2, "umami": 3},
+        {"fresh": 4, "spicy": 3, "adventurous": 3, "light": 2, "acidic": 3, "saucy": 2, "umami": 3, "brothy": 2, "garlic": 2},
     ),
     FoodStyle(
         "Indian",
         "Warming, saucy, spiced, filling, and very good when dinner needs to feel decisive.",
         "butter chicken, chana masala, biryani, dal, paneer tikka",
-        {"comfort": 4, "spicy": 4, "hearty": 4, "saucy": 4, "adventurous": 3, "umami": 3},
+        {"comfort": 4, "spicy": 4, "hearty": 4, "saucy": 4, "creamy": 3, "adventurous": 3, "umami": 3},
     ),
     FoodStyle(
         "Mexican",
         "Flexible, high-satisfaction, easy to share, and strong on handheld or bowl formats.",
         "tacos, burrito bowls, quesadillas, enchiladas, elote",
-        {"comfort": 3, "spicy": 3, "hearty": 3, "handheld": 4, "familiar": 3, "budget": 4, "fast": 4},
+        {"comfort": 3, "spicy": 3, "hearty": 3, "handheld": 4, "cheesy": 2, "familiar": 3, "budget": 4, "fast": 4},
     ),
     FoodStyle(
         "Japanese",
         "Clean, savory, precise, and good when calm food with texture sounds right.",
         "sushi, ramen, donburi, teriyaki, udon",
-        {"fresh": 3, "umami": 5, "light": 3, "comfort": 2, "protein": 3, "premium": 2, "bowl": 2},
+        {"fresh": 3, "umami": 5, "light": 3, "comfort": 2, "protein": 3, "premium": 2, "bowl": 2, "brothy": 3, "seafood": 2},
     ),
     FoodStyle(
         "Mediterranean",
         "Fresh, balanced, herby, and filling without landing too heavily.",
         "shawarma bowls, falafel, kebabs, hummus plates, Greek salads",
-        {"fresh": 4, "light": 4, "acidic": 4, "protein": 3, "shareable": 3, "balanced": 4, "budget": 2},
+        {"fresh": 4, "light": 4, "acidic": 4, "protein": 3, "shareable": 3, "balanced": 4, "vegetable": 3, "budget": 2},
     ),
     FoodStyle(
         "Italian",
         "Cozy, familiar, carb-forward, and especially good for comfort-seeking groups.",
         "pizza, pasta, risotto, chicken parm, caprese sandwiches",
-        {"comfort": 5, "carby": 5, "hearty": 4, "familiar": 5, "saucy": 3, "shareable": 3},
+        {"comfort": 5, "carby": 5, "hearty": 4, "familiar": 5, "saucy": 3, "shareable": 3, "cheesy": 4, "creamy": 2},
     ),
     FoodStyle(
         "Korean",
         "Bold, savory, spicy, crunchy, and satisfying when you want contrast.",
         "bibimbap, bulgogi, Korean fried chicken, kimchi stew, japchae",
-        {"spicy": 4, "umami": 5, "adventurous": 3, "hearty": 3, "crunchy": 3, "sweet_savory": 3},
+        {"spicy": 4, "umami": 5, "adventurous": 3, "hearty": 3, "crunchy": 3, "sweet_savory": 3, "garlic": 3},
     ),
     FoodStyle(
         "American Comfort",
         "Direct, familiar, filling, and convenient when the goal is an easy yes.",
         "burgers, fried chicken, mac and cheese, sandwiches, barbecue",
-        {"comfort": 4, "hearty": 5, "crunchy": 3, "familiar": 5, "budget": 3, "fast": 4, "indulgent": 4},
+        {"comfort": 4, "hearty": 5, "crunchy": 3, "familiar": 5, "budget": 3, "fast": 4, "indulgent": 4, "smoky": 2, "breakfast": 2, "beef": 2, "chicken": 2},
     ),
     FoodStyle(
         "Chinese",
         "Savory, shareable, reliable, and good when leftovers are part of the fantasy.",
         "dumplings, noodles, fried rice, mapo tofu, orange chicken",
-        {"umami": 5, "comfort": 3, "hearty": 3, "shareable": 4, "saucy": 3, "sweet_savory": 3, "budget": 3},
+        {"umami": 5, "comfort": 3, "hearty": 3, "shareable": 4, "saucy": 3, "sweet_savory": 3, "budget": 3, "snacky": 2, "garlic": 2},
     ),
 ]
 
@@ -210,15 +223,15 @@ MENU_KEYWORDS = {
     "pasta": ({"carby": 5, "saucy": 4, "comfort": 4}, "pasta, sauces, Italian comfort"),
     "pho": ({"brothy": 5, "fresh": 3, "light": 2, "umami": 3}, "pho, brothy noodles, herbs"),
     "ramen": ({"brothy": 5, "umami": 5, "comfort": 3, "bowl": 3}, "ramen, broth, noodles"),
-    "sushi": ({"fresh": 4, "light": 3, "premium": 3, "protein": 3}, "sushi, rolls, raw or cooked fish"),
-    "poke": ({"fresh": 5, "light": 4, "protein": 3, "bowl": 4}, "poke bowls, fresh fish, rice"),
+    "sushi": ({"fresh": 4, "light": 3, "premium": 3, "protein": 3, "seafood": 5, "raw_fish": 4}, "sushi, rolls, raw or cooked fish"),
+    "poke": ({"fresh": 5, "light": 4, "protein": 3, "bowl": 4, "seafood": 5, "raw_fish": 3}, "poke bowls, fresh fish, rice"),
     "taco": ({"handheld": 5, "spicy": 3, "budget": 3, "fast": 3}, "tacos, salsas, handheld bites"),
     "burrito": ({"handheld": 4, "hearty": 4, "budget": 4, "fast": 3}, "burritos, bowls, beans, rice"),
-    "burger": ({"familiar": 5, "hearty": 4, "indulgent": 4, "fast": 3}, "burgers, fries, American comfort"),
-    "wing": ({"crunchy": 4, "spicy": 3, "shareable": 4, "indulgent": 3}, "wings, sauces, shareable fried food"),
-    "chicken": ({"protein": 4, "familiar": 3, "fast": 2}, "chicken plates, sandwiches, bowls"),
-    "bbq": ({"smoky": 5, "hearty": 5, "indulgent": 3, "shareable": 2}, "barbecue, smoked meats, hearty sides"),
-    "barbecue": ({"smoky": 5, "hearty": 5, "indulgent": 3, "shareable": 2}, "barbecue, smoked meats, hearty sides"),
+    "burger": ({"familiar": 5, "hearty": 4, "indulgent": 4, "fast": 3, "beef": 4}, "burgers, fries, American comfort"),
+    "wing": ({"crunchy": 4, "spicy": 3, "shareable": 4, "indulgent": 3, "chicken": 5}, "wings, sauces, shareable fried food"),
+    "chicken": ({"protein": 4, "familiar": 3, "fast": 2, "chicken": 5}, "chicken plates, sandwiches, bowls"),
+    "bbq": ({"smoky": 5, "hearty": 5, "indulgent": 3, "shareable": 2, "beef": 2, "pork": 3}, "barbecue, smoked meats, hearty sides"),
+    "barbecue": ({"smoky": 5, "hearty": 5, "indulgent": 3, "shareable": 2, "beef": 2, "pork": 3}, "barbecue, smoked meats, hearty sides"),
     "salad": ({"fresh": 5, "light": 5, "balanced": 3}, "salads, greens, lighter bowls"),
     "vegan": ({"fresh": 4, "light": 3, "adventurous": 2, "balanced": 3}, "plant-based bowls and plates"),
     "falafel": ({"fresh": 4, "acidic": 3, "crunchy": 3, "budget": 2}, "falafel, hummus, pita, herbs"),
@@ -231,6 +244,11 @@ MENU_KEYWORDS = {
     "deli": ({"handheld": 4, "fast": 4, "familiar": 3}, "deli sandwiches, salads, quick plates"),
     "bakery": ({"indulgent": 4, "sweet_savory": 3, "comfort": 2}, "baked goods, sandwiches, treats"),
     "dessert": ({"indulgent": 5, "sweet_savory": 4, "premium": 1}, "desserts and sweet treats"),
+    "egg": ({"breakfast": 5, "comfort": 2, "protein": 2}, "eggs and breakfast-for-dinner options"),
+    "brunch": ({"breakfast": 5, "comfort": 2, "familiar": 2}, "brunch plates and breakfast comfort"),
+    "cheese": ({"cheesy": 5, "comfort": 2, "indulgent": 2}, "cheesy comfort options"),
+    "quesadilla": ({"cheesy": 5, "handheld": 3, "comfort": 2}, "quesadillas and melty handhelds"),
+    "garlic": ({"garlic": 5, "umami": 2, "saucy": 1}, "garlicky savory dishes"),
 }
 
 
@@ -252,7 +270,7 @@ def normalize_name(name: str) -> str:
 
 
 def parse_restaurant_text(text: str, filename: str = "restaurants.txt") -> list[str]:
-    if filename.lower().endswith(".csv") or "," in text:
+    if filename.lower().endswith(".csv"):
         rows = list(csv.DictReader(io.StringIO(text)))
         if rows:
             name_key = next((key for key in rows[0] if key and key.lower() in {"name", "restaurant", "restaurant name"}), None)
@@ -350,10 +368,12 @@ def initialize_state() -> None:
     st.session_state.setdefault("diner_count", 2)
     st.session_state.setdefault("diner_names", default_diner_names())
     st.session_state.setdefault("submitted_diners", {})
+    st.session_state.setdefault("editing_diners", {})
 
 
 def reset_diner_choices() -> None:
     st.session_state["submitted_diners"] = {}
+    st.session_state["editing_diners"] = {}
     for key in list(st.session_state.keys()):
         if re.match(r"^diner_\d+_", key):
             del st.session_state[key]
@@ -388,6 +408,24 @@ def calculate_diner_profile(diner_id: int, diner_name: str) -> tuple[dict[str, i
         profile = add_profiles(profile, {"spicy": -8})
     if "Too heavy" in hard_nos:
         profile = add_profiles(profile, {"hearty": -5, "indulgent": -5})
+    if "Too greasy/fried" in hard_nos:
+        profile = add_profiles(profile, {"crunchy": -4, "indulgent": -4, "fast": -2})
+    if "Seafood" in hard_nos:
+        profile = add_profiles(profile, {"seafood": -12, "raw_fish": -8, "premium": -2})
+    if "Raw fish/sushi" in hard_nos:
+        profile = add_profiles(profile, {"raw_fish": -12, "seafood": -3, "premium": -3})
+    if "Beef" in hard_nos:
+        profile = add_profiles(profile, {"beef": -10, "hearty": -1, "smoky": -2})
+    if "Pork" in hard_nos:
+        profile = add_profiles(profile, {"pork": -10, "smoky": -2})
+    if "Chicken" in hard_nos:
+        profile = add_profiles(profile, {"chicken": -10, "protein": -1})
+    if "Dairy-heavy" in hard_nos:
+        profile = add_profiles(profile, {"creamy": -6, "cheesy": -6, "indulgent": -2})
+    if "Noodles or rice" in hard_nos:
+        profile = add_profiles(profile, {"carby": -4, "bowl": -2, "brothy": -2})
+    if "Sandwiches/handhelds" in hard_nos:
+        profile = add_profiles(profile, {"handheld": -7, "fast": -1})
     if "Expensive" in hard_nos:
         profile = add_profiles(profile, {"premium": -5, "budget": 4})
     if "Too adventurous" in hard_nos:
@@ -395,7 +433,7 @@ def calculate_diner_profile(diner_id: int, diner_name: str) -> tuple[dict[str, i
 
     for index, question in enumerate(QUESTIONS, start=1):
         answer = st.session_state[f"diner_{diner_id}_question_{index}"]
-        selected = question.left if answer == question.left.label else question.right
+        selected = next(option for option in question.options if option.label == answer)
         profile = add_profiles(profile, selected.traits)
         reasons.append(f"{diner_name} chose {selected.label.lower()}.")
 
@@ -404,17 +442,32 @@ def calculate_diner_profile(diner_id: int, diner_name: str) -> tuple[dict[str, i
 
 def diner_form(diner_id: int, diner_name: str) -> tuple[dict[str, int], list[str]] | None:
     submitted_diners = st.session_state["submitted_diners"]
+    editing_diners = st.session_state["editing_diners"]
     submitted = submitted_diners.get(diner_id)
+    is_editing = editing_diners.get(diner_id, False)
+
+    if submitted and not is_editing:
+        st.markdown(
+            f"""
+            <div class="done-card">
+                <strong>{diner_name} has made their choices.</strong>
+                <span>Ready for the group match.</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if st.button("Edit", key=f"edit_diner_{diner_id}", type="primary"):
+            editing_diners[diner_id] = True
+            st.rerun()
+        return submitted["profile"], submitted["reasons"]
+
     label = (
-        f"{diner_name}, choices made - tap to edit"
-        if submitted
+        f"Editing {diner_name}'s choices"
+        if is_editing
         else f"{diner_name}, what are you craving to eat?"
     )
 
-    if submitted:
-        st.success(f"{diner_name} has made their choices.")
-
-    with st.expander(label, expanded=False):
+    with st.expander(label, expanded=is_editing):
         with st.form(f"diner_{diner_id}_form"):
             st.radio(
                 "Dinner mood",
@@ -425,21 +478,40 @@ def diner_form(diner_id: int, diner_name: str) -> tuple[dict[str, int], list[str
             st.slider("How hungry are you?", 1, 5, 3, key=f"diner_{diner_id}_hunger")
             st.multiselect(
                 "Hard no's tonight",
-                ["Too spicy", "Too heavy", "Raw fish", "Dairy-heavy", "Expensive", "Too adventurous"],
+                [
+                    "Too spicy",
+                    "Too heavy",
+                    "Too greasy/fried",
+                    "Seafood",
+                    "Raw fish/sushi",
+                    "Beef",
+                    "Pork",
+                    "Chicken",
+                    "Dairy-heavy",
+                    "Noodles or rice",
+                    "Sandwiches/handhelds",
+                    "Expensive",
+                    "Too adventurous",
+                ],
                 key=f"diner_{diner_id}_nos",
             )
 
             st.markdown("#### Quick photo picks")
             for index, question in enumerate(QUESTIONS, start=1):
-                image_path = QUESTION_IMAGE_DIR / question.image
                 with st.container(border=True):
-                    if image_path.exists():
-                        st.image(str(image_path), width=280)
+                    cols = st.columns(3)
+                    for column, option in zip(cols, question.options):
+                        image_path = CHOICE_IMAGE_DIR / option.image
+                        with column:
+                            if image_path.exists():
+                                st.image(str(image_path), width="stretch")
+                            st.caption(option.label)
                     st.radio(
                         question.prompt,
-                        [question.left.label, question.right.label],
+                        [option.label for option in question.options],
                         horizontal=True,
                         key=f"diner_{diner_id}_question_{index}",
+                        label_visibility="collapsed",
                     )
 
             if st.form_submit_button(f"Submit {diner_name}'s picks", width="stretch"):
@@ -449,6 +521,7 @@ def diner_form(diner_id: int, diner_name: str) -> tuple[dict[str, int], list[str
                     "profile": profile,
                     "reasons": reasons,
                 }
+                editing_diners[diner_id] = False
                 st.rerun()
 
     refreshed = submitted_diners.get(diner_id)
@@ -459,7 +532,14 @@ def diner_form(diner_id: int, diner_name: str) -> tuple[dict[str, int], list[str
 
 
 def dot_score(want: dict[str, int], offer: dict[str, int]) -> int:
-    return sum(want_value * offer.get(trait, 0) for trait, want_value in want.items())
+    raw = sum(want_value * offer.get(trait, 0) for trait, want_value in want.items())
+    offer_strength = sum(value * value for value in offer.values() if value > 0) ** 0.5
+    want_strength = sum(value * value for value in want.values() if value > 0) ** 0.5
+    if not offer_strength or not want_strength:
+        return raw
+
+    # Normalize so broad menus do not always beat specific craving matches.
+    return round(100 * raw / (offer_strength * want_strength))
 
 
 def rank_food_styles(group_profile: dict[str, int]) -> list[tuple[FoodStyle, int]]:
@@ -531,19 +611,37 @@ def three_hits(restaurants: list[Restaurant], group_profile: dict[str, int], din
     ]
 
 
-st.set_page_config(page_title="DoorDash Decider", page_icon="🍽️", layout="centered")
+page_icon = Image.open(BRAND_IMAGE_PATH) if BRAND_IMAGE_PATH.exists() else "🍽️"
+st.set_page_config(page_title="Leita Dining Decider", page_icon=page_icon, layout="centered")
 initialize_state()
 
 st.markdown(
     """
+    <meta property="og:title" content="Leita Dining Decider">
+    <meta property="og:description" content="A visual craving compass for group dinner decisions.">
     <style>
+    .done-card {
+        background: #176c3a;
+        border: 1px solid #35b36d;
+        border-radius: 10px;
+        color: white;
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+        margin: 0.45rem 0 0.25rem;
+        padding: 0.85rem 0.95rem;
+    }
+    .done-card span {
+        color: #d5f7e2;
+        font-size: 0.9rem;
+    }
     div[data-testid="stExpander"] details summary p {
         font-size: 1.05rem;
         font-weight: 700;
     }
     div[data-testid="stImage"] img {
         border-radius: 10px;
-        max-height: 160px;
+        max-height: 92px;
         object-fit: cover;
     }
     div[data-testid="stRadio"] label {
@@ -558,7 +656,10 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.title("DoorDash Decider")
+if BRAND_IMAGE_PATH.exists():
+    st.image(str(BRAND_IMAGE_PATH), width="stretch")
+
+st.title("Leita Dining Decider")
 st.caption("A visual craving compass for groups that know they want dinner but do not know what dinner is yet.")
 
 with st.container(border=True):
