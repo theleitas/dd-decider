@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import base64
 import io
 import re
 from dataclasses import dataclass, field
@@ -204,7 +205,6 @@ CUISINE_KEYWORDS = {
     "Korean": ["korean", "kimchi", "bulgogi", "bibimbap", "k-bbq", "bbq chicken"],
     "American Comfort": [
         "burger",
-        "chicken",
         "wing",
         "sandwich",
         "bbq",
@@ -215,6 +215,85 @@ CUISINE_KEYWORDS = {
         "cheesesteak",
     ],
     "Chinese": ["chinese", "dumpling", "wok", "szechuan", "sichuan", "noodle", "fried rice", "panda"],
+}
+
+
+KNOWN_RESTAURANTS = {
+    "chicken salad chick": (
+        {"fresh": 7, "light": 6, "protein": 5, "creamy": 4, "salad": 7, "sandwich": 3, "soup": 2, "familiar": 3},
+        ("salad cafe", "chicken salad", "sandwiches"),
+        "chicken salad scoops, sandwiches, soups, sides, pimento cheese, salads",
+    ),
+    "chick-fil-a": (
+        {"chicken": 8, "handheld": 5, "fast": 6, "familiar": 5, "crunchy": 3, "salad": 2},
+        ("chicken", "quick service"),
+        "chicken sandwiches, nuggets, salads, waffle fries",
+    ),
+    "panera": (
+        {"soup": 5, "salad": 5, "sandwich": 5, "fresh": 3, "familiar": 4, "fast": 3},
+        ("cafe", "soups", "salads"),
+        "soups, salads, sandwiches, mac and cheese, bakery items",
+    ),
+    "cava": (
+        {"fresh": 7, "bowl": 6, "vegetable": 5, "protein": 4, "acidic": 3, "light": 3},
+        ("Mediterranean", "bowls"),
+        "Mediterranean bowls, greens, grains, dips, grilled proteins",
+    ),
+    "sweetgreen": (
+        {"fresh": 8, "salad": 8, "vegetable": 6, "light": 5, "balanced": 5},
+        ("salads", "bowls"),
+        "salads, warm bowls, greens, grains, vegetables",
+    ),
+    "chipotle": (
+        {"bowl": 6, "handheld": 4, "hearty": 4, "budget": 4, "fast": 5, "spicy": 2},
+        ("Mexican", "bowls"),
+        "burritos, bowls, tacos, rice, beans, grilled proteins",
+    ),
+    "jersey mike": (
+        {"sandwich": 8, "handheld": 7, "fast": 5, "familiar": 4},
+        ("subs", "sandwiches"),
+        "cold and hot subs, chips, cookies",
+    ),
+    "subway": (
+        {"sandwich": 8, "handheld": 7, "fast": 6, "budget": 4, "familiar": 4},
+        ("subs", "sandwiches"),
+        "subs, wraps, salads, cookies",
+    ),
+    "tropical smoothie": (
+        {"fresh": 5, "light": 4, "smoothie": 8, "handheld": 3, "salad": 2},
+        ("smoothies", "wraps"),
+        "smoothies, wraps, flatbreads, salads",
+    ),
+    "first watch": (
+        {"breakfast": 8, "fresh": 4, "comfort": 4, "familiar": 3},
+        ("breakfast", "brunch"),
+        "breakfast, brunch, eggs, pancakes, salads, sandwiches",
+    ),
+    "panda express": (
+        {"Chinese": 4, "sweet_savory": 5, "umami": 4, "fast": 6, "bowl": 4, "chicken": 3},
+        ("Chinese", "quick service"),
+        "orange chicken, chow mein, fried rice, bowls, plates",
+    ),
+    "five guys": (
+        {"burger": 8, "beef": 7, "handheld": 5, "indulgent": 5, "familiar": 5},
+        ("burgers", "fries"),
+        "burgers, hot dogs, fries, shakes",
+    ),
+    "shake shack": (
+        {"burger": 8, "beef": 6, "handheld": 5, "indulgent": 5, "premium": 2},
+        ("burgers", "fries"),
+        "burgers, chicken sandwiches, fries, shakes",
+    ),
+    "wingstop": (
+        {"wing": 8, "chicken": 8, "crunchy": 5, "spicy": 4, "shareable": 5},
+        ("wings", "chicken"),
+        "wings, tenders, fries, dips",
+    ),
+    "zaxby": (
+        {"chicken": 8, "crunchy": 5, "handheld": 3, "salad": 2, "fast": 4},
+        ("chicken", "salads"),
+        "chicken fingers, wings, sandwiches, salads, fries",
+    ),
 }
 
 
@@ -233,6 +312,8 @@ MENU_KEYWORDS = {
     "bbq": ({"smoky": 5, "hearty": 5, "indulgent": 3, "shareable": 2, "beef": 2, "pork": 3}, "barbecue, smoked meats, hearty sides"),
     "barbecue": ({"smoky": 5, "hearty": 5, "indulgent": 3, "shareable": 2, "beef": 2, "pork": 3}, "barbecue, smoked meats, hearty sides"),
     "salad": ({"fresh": 5, "light": 5, "balanced": 3}, "salads, greens, lighter bowls"),
+    "soup": ({"soup": 5, "brothy": 3, "comfort": 2, "light": 1}, "soups and brothy comfort"),
+    "chicken salad": ({"salad": 8, "fresh": 6, "light": 5, "protein": 4, "creamy": 3}, "chicken salad, scoops, sandwiches, light sides"),
     "vegan": ({"fresh": 4, "light": 3, "adventurous": 2, "balanced": 3}, "plant-based bowls and plates"),
     "falafel": ({"fresh": 4, "acidic": 3, "crunchy": 3, "budget": 2}, "falafel, hummus, pita, herbs"),
     "shawarma": ({"protein": 4, "fresh": 3, "saucy": 2, "handheld": 3}, "shawarma, pita, rice plates"),
@@ -319,6 +400,13 @@ def infer_restaurant(raw_name: str) -> Restaurant:
     tags: list[str] = []
     menu_hints: list[str] = []
 
+    for known_name, (traits, known_tags, known_hint) in KNOWN_RESTAURANTS.items():
+        if known_name in lower_name:
+            profile = add_profiles(profile, traits, multiplier=4)
+            tags.extend(known_tags)
+            menu_hints.append(known_hint)
+            break
+
     for style in FOOD_STYLES:
         keywords = CUISINE_KEYWORDS.get(style.name, [])
         hits = sum(1 for keyword in keywords if keyword in lower_name)
@@ -361,11 +449,11 @@ def infer_restaurant(raw_name: str) -> Restaurant:
 
 
 def default_diner_names() -> list[str]:
-    return ["Jayme", "Diner 2", "Diner 3", "Diner 4", "Diner 5", "Diner 6"]
+    return ["Molly", "Jayme", "Benji", "Diner 4", "Diner 5", "Diner 6"]
 
 
 def initialize_state() -> None:
-    st.session_state.setdefault("diner_count", 2)
+    st.session_state.setdefault("diner_count", 3)
     st.session_state.setdefault("diner_names", default_diner_names())
     st.session_state.setdefault("submitted_diners", {})
     st.session_state.setdefault("editing_diners", {})
@@ -504,7 +592,9 @@ def diner_form(diner_id: int, diner_name: str) -> tuple[dict[str, int], list[str
                         image_path = CHOICE_IMAGE_DIR / option.image
                         with column:
                             if image_path.exists():
+                                st.markdown('<div class="choice-img">', unsafe_allow_html=True)
                                 st.image(str(image_path), width="stretch")
+                                st.markdown("</div>", unsafe_allow_html=True)
                             st.caption(option.label)
                     st.radio(
                         question.prompt,
@@ -639,6 +729,18 @@ st.markdown(
         font-size: 1.05rem;
         font-weight: 700;
     }
+    .hero-img {
+        border-radius: 14px;
+        display: block;
+        margin: 0 auto 1rem;
+        width: 100%;
+    }
+    .choice-img img {
+        aspect-ratio: 1.25 / 1;
+        border-radius: 10px;
+        object-fit: cover;
+        width: 100%;
+    }
     div[data-testid="stImage"] img {
         border-radius: 10px;
         max-height: 92px;
@@ -657,7 +759,11 @@ st.markdown(
 )
 
 if BRAND_IMAGE_PATH.exists():
-    st.image(str(BRAND_IMAGE_PATH), width="stretch")
+    hero_image = base64.b64encode(BRAND_IMAGE_PATH.read_bytes()).decode("ascii")
+    st.markdown(
+        f'<img class="hero-img" src="data:image/jpeg;base64,{hero_image}" alt="Leita Dining Decider">',
+        unsafe_allow_html=True,
+    )
 
 st.title("Leita Dining Decider")
 st.caption("A visual craving compass for groups that know they want dinner but do not know what dinner is yet.")
