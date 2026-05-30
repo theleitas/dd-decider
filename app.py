@@ -32,6 +32,8 @@ SHARED_STATE_LOCK_PATH = DATA_DIR / "shared_state.lock"
 CHOICE_IMAGE_DIR = Path("assets/food_choices")
 LOGO_DIR = Path("assets/restaurant_logos")
 BRAND_IMAGE_PATH = Path("assets/brand/leita-dining-decider.jpg")
+SOCIAL_PREVIEW_IMAGE_PATH = Path("static/leita-imessage-preview.jpg")
+SOCIAL_PREVIEW_IMAGE_URL = "https://raw.githubusercontent.com/theleitas/dd-decider/main/static/leita-imessage-preview.jpg"
 HTTP_HEADERS = {"User-Agent": "LeitaDiningDecider/1.0"}
 SHARED_STATE_VERSION = 2
 
@@ -880,8 +882,16 @@ def reset_diner_choices() -> None:
 
 
 def selected_restaurant_types(diner_id: int) -> tuple[str, ...]:
-    selected = st.session_state.get(f"diner_{diner_id}_types", [])
-    return tuple(restaurant_type for restaurant_type in selected if restaurant_type in TYPE_NAMES)[:3]
+    return tuple(
+        restaurant_type
+        for restaurant_type in TYPE_NAMES
+        if st.session_state.get(f"diner_{diner_id}_type_{restaurant_type}", False)
+    )
+
+
+def keep_diner_open(diner_id: int) -> None:
+    st.session_state.setdefault("editing_diners", {})
+    st.session_state["editing_diners"][diner_id] = True
 
 
 def calculate_diner_profile(diner_id: int, diner_name: str) -> tuple[dict[str, int], list[str]]:
@@ -965,18 +975,23 @@ def diner_form(diner_id: int, diner_name: str) -> tuple[dict[str, int], list[str
     )
 
     with st.expander(label, expanded=is_editing):
-        with st.form(f"diner_{diner_id}_form"):
-            st.markdown("#### Pick 3 restaurant types")
-            st.multiselect(
-                "Restaurant type picks",
-                TYPE_NAMES,
-                key=f"diner_{diner_id}_types",
-                max_selections=3,
-                label_visibility="collapsed",
-                placeholder="Choose up to 3 food types",
-            )
-            st.caption("Choose up to 3. These carry the most weight.")
+        st.markdown("#### Pick 3 restaurant types")
+        selected_type_count = len(selected_restaurant_types(diner_id))
+        type_columns = st.columns(2)
+        for index, restaurant_type in enumerate(TYPE_NAMES):
+            key = f"diner_{diner_id}_type_{restaurant_type}"
+            is_checked = st.session_state.get(key, False)
+            with type_columns[index % 2]:
+                st.checkbox(
+                    restaurant_type,
+                    key=key,
+                    disabled=not is_checked and selected_type_count >= 3,
+                    on_change=keep_diner_open,
+                    args=(diner_id,),
+                )
+        st.caption("Choose up to 3. These carry the most weight.")
 
+        with st.form(f"diner_{diner_id}_form"):
             st.radio(
                 "Dinner mood",
                 ["Tired", "Stressed", "Happy", "Restless", "Focused", "Indulgent"],
@@ -1151,10 +1166,23 @@ page_icon = Image.open(BRAND_IMAGE_PATH) if BRAND_IMAGE_PATH.exists() else "🍽
 st.set_page_config(page_title="Leita Dining Decider", page_icon=page_icon, layout="centered")
 initialize_state()
 
-st.markdown(
-    """
-    <meta property="og:title" content="Leita Dining Decider">
-    <meta property="og:description" content="A visual craving compass for group dinner decisions.">
+social_preview_meta = f"""
+<meta property="og:title" content="Leita Dining Decider">
+<meta property="og:description" content="A visual craving compass for group dinner decisions.">
+<meta property="og:image" content="{SOCIAL_PREVIEW_IMAGE_URL}">
+<meta property="og:image:secure_url" content="{SOCIAL_PREVIEW_IMAGE_URL}">
+<meta property="og:image:type" content="image/jpeg">
+<meta property="og:image:width" content="1024">
+<meta property="og:image:height" content="1024">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Leita Dining Decider">
+<meta name="twitter:description" content="A visual craving compass for group dinner decisions.">
+<meta name="twitter:image" content="{SOCIAL_PREVIEW_IMAGE_URL}">
+"""
+
+st.html(
+    social_preview_meta
+    + """
     <style>
     .done-card {
         background: #176c3a;
@@ -1231,7 +1259,6 @@ st.markdown(
     }
     </style>
     """,
-    unsafe_allow_html=True,
 )
 
 if BRAND_IMAGE_PATH.exists():

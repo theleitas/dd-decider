@@ -11,8 +11,8 @@ familiar vs. adventurous vs. upscale, and more. It combines only submitted diner
 answers into one group profile and recommends three restaurant hits from a saved
 DoorDash restaurant list:
 
-Each diner first picks up to three restaurant types from an 18-category,
-emoji-labeled food type list. Those type picks carry the most weight, and the
+Each diner first picks up to three restaurant types from a visible 18-category,
+emoji-labeled food type grid. Those type picks carry the most weight, and the
 photo questions refine the group consensus.
 
 - Best consensus: everyone likely says yes.
@@ -42,6 +42,8 @@ The bottom Admin section controls setup:
   small restaurant logos and displays cached logos on final result cards.
 - The Leita Dining Decider image is used at the top of the page and as the app
   icon where Streamlit supports it.
+- A dedicated social preview image is included for richer iMessage-style link
+  cards.
 
 Future versions can replace the name-based matcher with richer DoorDash/menu
 metadata, pricing, ratings, delivery time, and restaurant photos.
