@@ -43,6 +43,7 @@ class Restaurant:
     name: str
     profile: dict[str, int]
     tags: tuple[str, ...]
+    types: tuple[str, ...]
     menu_hint: str
 
 
@@ -126,6 +127,26 @@ QUESTIONS = [
         ),
     ),
 ]
+
+
+RESTAURANT_TYPES = {
+    "🇲🇽 Mexican": {"type_mexican": 14, "spicy": 2, "handheld": 2, "bowl": 1},
+    "🍝 Italian": {"type_italian": 14, "carby": 3, "saucy": 2, "comfort": 2},
+    "🍔 Burgers": {"type_burgers": 14, "beef": 4, "handheld": 2, "indulgent": 2},
+    "🥙 Greek": {"type_greek": 14, "fresh": 3, "acidic": 2, "protein": 2, "vegetable": 2},
+    "🌶️ Thai": {"type_thai": 14, "spicy": 3, "fresh": 2, "saucy": 2, "adventurous": 1},
+    "🍟 Fast Food": {"type_fast_food": 14, "fast": 5, "familiar": 2, "budget": 2},
+    "🍕 Pizza": {"type_pizza": 14, "carby": 3, "cheesy": 4, "shareable": 2},
+    "🍣 Japanese": {"type_japanese": 14, "fresh": 2, "umami": 3, "brothy": 1, "premium": 1},
+    "🥡 Chinese": {"type_chinese": 14, "umami": 3, "saucy": 2, "shareable": 2},
+    "🔥 Grill": {"type_grill": 14, "smoky": 5, "protein": 3, "hearty": 2},
+    "🍽️ American": {"type_american": 14, "familiar": 4, "comfort": 2, "fast": 1},
+    "🍳 Breakfast": {"type_breakfast": 14, "breakfast": 5, "comfort": 2, "familiar": 2},
+    "🥪 Subs": {"type_subs": 14, "sandwich": 5, "handheld": 4, "fast": 2},
+}
+
+
+TYPE_NAMES = tuple(RESTAURANT_TYPES.keys())
 
 
 FOOD_STYLES = [
@@ -297,6 +318,42 @@ KNOWN_RESTAURANTS = {
 }
 
 
+KNOWN_RESTAURANT_TYPES = {
+    "chicken salad chick": ("🍽️ American", "🥪 Subs"),
+    "chick-fil-a": ("🍟 Fast Food", "🍽️ American"),
+    "panera": ("🍽️ American", "🥪 Subs", "🍳 Breakfast"),
+    "cava": ("🥙 Greek",),
+    "sweetgreen": ("🍽️ American",),
+    "chipotle": ("🇲🇽 Mexican", "🍟 Fast Food"),
+    "jersey mike": ("🥪 Subs",),
+    "subway": ("🥪 Subs", "🍟 Fast Food"),
+    "tropical smoothie": ("🍽️ American", "🥪 Subs"),
+    "first watch": ("🍳 Breakfast", "🍽️ American"),
+    "panda express": ("🥡 Chinese", "🍟 Fast Food"),
+    "five guys": ("🍔 Burgers", "🍟 Fast Food", "🍽️ American"),
+    "shake shack": ("🍔 Burgers", "🍟 Fast Food", "🍽️ American"),
+    "wingstop": ("🍟 Fast Food", "🍽️ American"),
+    "zaxby": ("🍟 Fast Food", "🍽️ American"),
+}
+
+
+TYPE_KEYWORDS = {
+    "🇲🇽 Mexican": ["mexican", "taco", "burrito", "quesadilla", "taqueria", "cantina", "chipotle", "salsa"],
+    "🍝 Italian": ["italian", "pasta", "trattoria", "risotto", "parm", "lasagna"],
+    "🍔 Burgers": ["burger", "burgers", "five guys", "shake shack"],
+    "🥙 Greek": ["greek", "gyro", "falafel", "shawarma", "hummus", "pita", "mediterranean", "kebab", "kebob"],
+    "🌶️ Thai": ["thai", "pad thai", "curry", "basil", "lemongrass"],
+    "🍟 Fast Food": ["express", "fast", "drive", "mcdonald", "wendy", "taco bell", "popeyes", "kfc", "zaxby"],
+    "🍕 Pizza": ["pizza", "pizzeria"],
+    "🍣 Japanese": ["japanese", "sushi", "ramen", "hibachi", "teriyaki", "poke", "udon"],
+    "🥡 Chinese": ["chinese", "wok", "szechuan", "sichuan", "dumpling", "fried rice", "panda"],
+    "🔥 Grill": ["grill", "grille", "bbq", "barbecue", "steak", "smokehouse", "kebab", "kebob"],
+    "🍽️ American": ["american", "diner", "chicken salad", "wing", "wings", "chicken", "bar", "cafe"],
+    "🍳 Breakfast": ["breakfast", "brunch", "egg", "pancake", "waffle", "biscuit", "first watch"],
+    "🥪 Subs": ["sub", "subs", "sandwich", "deli", "hoagie", "jersey mike", "subway"],
+}
+
+
 MENU_KEYWORDS = {
     "pizza": ({"carby": 5, "comfort": 4, "shareable": 3, "familiar": 3}, "pizza, pasta, cheesy comfort"),
     "pasta": ({"carby": 5, "saucy": 4, "comfort": 4}, "pasta, sauces, Italian comfort"),
@@ -391,6 +448,21 @@ def add_profiles(base: dict[str, int], extra: dict[str, int], multiplier: int = 
     return combined
 
 
+def infer_restaurant_types(lower_name: str) -> tuple[str, ...]:
+    types: list[str] = []
+
+    for known_name, known_types in KNOWN_RESTAURANT_TYPES.items():
+        if known_name in lower_name:
+            types.extend(known_types)
+            break
+
+    for restaurant_type, keywords in TYPE_KEYWORDS.items():
+        if any(keyword in lower_name for keyword in keywords):
+            types.append(restaurant_type)
+
+    return tuple(dict.fromkeys(types))
+
+
 def infer_restaurant(raw_name: str) -> Restaurant:
     parts = [normalize_name(part) for part in re.split(r"\s+[|–—-]\s+|;", raw_name, maxsplit=1)]
     name = parts[0]
@@ -399,6 +471,10 @@ def infer_restaurant(raw_name: str) -> Restaurant:
     profile: dict[str, int] = {"familiar": 1, "fast": 1}
     tags: list[str] = []
     menu_hints: list[str] = []
+    restaurant_types = infer_restaurant_types(lower_name)
+
+    for restaurant_type in restaurant_types:
+        profile = add_profiles(profile, RESTAURANT_TYPES[restaurant_type], multiplier=3)
 
     for known_name, (traits, known_tags, known_hint) in KNOWN_RESTAURANTS.items():
         if known_name in lower_name:
@@ -439,11 +515,15 @@ def infer_restaurant(raw_name: str) -> Restaurant:
         tags.append("needs menu data")
         profile = add_profiles(profile, {"balanced": 2, "individual": 1})
         menu_hints.append("general delivery menu; needs richer menu data")
+    if not restaurant_types:
+        restaurant_types = ("🍽️ American",)
+        profile = add_profiles(profile, RESTAURANT_TYPES["🍽️ American"])
 
     return Restaurant(
         name=name,
         profile=profile,
         tags=tuple(dict.fromkeys(tags)),
+        types=restaurant_types,
         menu_hint="; ".join(dict.fromkeys(menu_hints[:3])),
     )
 
@@ -470,6 +550,14 @@ def reset_diner_choices() -> None:
 def calculate_diner_profile(diner_id: int, diner_name: str) -> tuple[dict[str, int], list[str]]:
     profile: dict[str, int] = {}
     reasons: list[str] = []
+
+    selected_types = st.session_state.get(f"diner_{diner_id}_types", [])
+    for restaurant_type in selected_types:
+        profile = add_profiles(profile, RESTAURANT_TYPES[restaurant_type], multiplier=4)
+
+    if selected_types:
+        clean_types = ", ".join(restaurant_type.split(" ", 1)[1] for restaurant_type in selected_types)
+        reasons.append(f"{diner_name}'s top restaurant types are {clean_types}.")
 
     mood = st.session_state[f"diner_{diner_id}_mood"]
     mood_traits = {
@@ -557,6 +645,13 @@ def diner_form(diner_id: int, diner_name: str) -> tuple[dict[str, int], list[str
 
     with st.expander(label, expanded=is_editing):
         with st.form(f"diner_{diner_id}_form"):
+            st.multiselect(
+                "Pick 3 restaurant types",
+                TYPE_NAMES,
+                max_selections=3,
+                key=f"diner_{diner_id}_types",
+                help="This is the strongest preference signal. The photo picks fine-tune it.",
+            )
             st.radio(
                 "Dinner mood",
                 ["Tired", "Stressed", "Happy", "Restless", "Focused", "Indulgent"],
@@ -822,6 +917,8 @@ else:
             st.subheader(restaurant.name)
             st.caption(explanation)
             st.write(f"Match score: {score}")
+            if restaurant.types:
+                st.write(f"Types: {', '.join(restaurant_type.split(' ', 1)[1] for restaurant_type in restaurant.types)}")
             st.write(f"Likely menu: {restaurant.menu_hint}")
             st.write(f"Signals: {', '.join(restaurant.tags)}")
 

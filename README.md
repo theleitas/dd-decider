@@ -11,6 +11,9 @@ familiar vs. adventurous vs. cheesy, and more. It combines only submitted diner
 answers into one group profile and recommends three restaurant hits from a saved
 DoorDash restaurant list:
 
+Each diner first picks up to three restaurant types. Those type picks carry the
+most weight, and the photo questions refine the group consensus.
+
 - Best consensus: everyone likely says yes.
 - Best craving match: strongest sensory fit.
 - Wildcard: slightly adventurous but still inside the group constraints.
@@ -28,6 +31,7 @@ The bottom Admin section controls setup:
   list.
 - Restaurant profiles are inferred from name, cuisine keywords, and any pasted
   menu hints.
+- Restaurant types are re-inferred every time the Admin restaurant list changes.
 - The Leita Dining Decider image is used at the top of the page and as the app
   icon where Streamlit supports it.
 
