@@ -1,11 +1,18 @@
 from __future__ import annotations
 
-import csv
 import base64
+import csv
 import io
+import json
 import re
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Streamlit Cloud and macOS both have fcntl.
+    fcntl = None
 
 import streamlit as st
 from PIL import Image
@@ -13,6 +20,8 @@ from PIL import Image
 
 DATA_DIR = Path("data")
 RESTAURANT_LIST_PATH = DATA_DIR / "restaurants.txt"
+SHARED_STATE_PATH = DATA_DIR / "shared_state.json"
+SHARED_STATE_LOCK_PATH = DATA_DIR / "shared_state.lock"
 CHOICE_IMAGE_DIR = Path("assets/food_choices")
 BRAND_IMAGE_PATH = Path("assets/brand/leita-dining-decider.jpg")
 
@@ -577,30 +586,165 @@ def default_diner_names() -> list[str]:
     return ["Molly", "Jayme", "Benji", "Diner 4", "Diner 5", "Diner 6"]
 
 
-def initialize_state() -> None:
-    st.session_state.setdefault("diner_count", 3)
-    st.session_state.setdefault("diner_names", default_diner_names())
-    st.session_state.setdefault("submitted_diners", {})
+def default_shared_state() -> dict:
+    return {
+        "diner_count": 3,
+        "diner_names": default_diner_names(),
+        "submitted_diners": {},
+    }
+
+
+@contextmanager
+def shared_state_lock():
+    DATA_DIR.mkdir(exist_ok=True)
+    with SHARED_STATE_LOCK_PATH.open("w", encoding="utf-8") as lock_file:
+        if fcntl:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            if fcntl:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def normalize_submitted_diners(raw_submitted: object) -> dict[str, dict]:
+    if not isinstance(raw_submitted, dict):
+        return {}
+
+    submitted: dict[str, dict] = {}
+    for raw_id, raw_record in raw_submitted.items():
+        try:
+            diner_id = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        if diner_id < 1 or diner_id > 6 or not isinstance(raw_record, dict):
+            continue
+
+        profile = raw_record.get("profile", {})
+        reasons = raw_record.get("reasons", [])
+        types = raw_record.get("types", [])
+        submitted[str(diner_id)] = {
+            "name": str(raw_record.get("name") or f"Diner {diner_id}"),
+            "profile": profile if isinstance(profile, dict) else {},
+            "reasons": reasons if isinstance(reasons, list) else [],
+            "types": list(types) if isinstance(types, (list, tuple)) else [],
+        }
+    return submitted
+
+
+def normalize_shared_state(raw_state: object) -> dict:
+    defaults = default_shared_state()
+    if not isinstance(raw_state, dict):
+        return defaults
+
+    try:
+        diner_count = int(raw_state.get("diner_count", defaults["diner_count"]))
+    except (TypeError, ValueError):
+        diner_count = defaults["diner_count"]
+    diner_count = min(max(diner_count, 1), 6)
+
+    raw_names = raw_state.get("diner_names", defaults["diner_names"])
+    names = list(raw_names) if isinstance(raw_names, list) else []
+    diner_names = []
+    for index in range(6):
+        fallback = defaults["diner_names"][index]
+        name = names[index] if index < len(names) else fallback
+        diner_names.append(str(name).strip() or fallback)
+
+    return {
+        "diner_count": diner_count,
+        "diner_names": diner_names,
+        "submitted_diners": normalize_submitted_diners(raw_state.get("submitted_diners", {})),
+    }
+
+
+def read_shared_state_unlocked() -> dict:
+    if not SHARED_STATE_PATH.exists():
+        return default_shared_state()
+
+    try:
+        return normalize_shared_state(json.loads(SHARED_STATE_PATH.read_text(encoding="utf-8")))
+    except json.JSONDecodeError:
+        return default_shared_state()
+
+
+def write_shared_state_unlocked(state: dict) -> None:
+    DATA_DIR.mkdir(exist_ok=True)
+    normalized_state = normalize_shared_state(state)
+    temp_path = SHARED_STATE_PATH.with_suffix(".json.tmp")
+    temp_path.write_text(json.dumps(normalized_state, indent=2, sort_keys=True), encoding="utf-8")
+    temp_path.replace(SHARED_STATE_PATH)
+
+
+def load_shared_state() -> dict:
+    with shared_state_lock():
+        state = read_shared_state_unlocked()
+        write_shared_state_unlocked(state)
+        return state
+
+
+def apply_shared_state_to_session(state: dict) -> None:
+    normalized_state = normalize_shared_state(state)
+    st.session_state["diner_count"] = normalized_state["diner_count"]
+    st.session_state["diner_names"] = normalized_state["diner_names"]
+    st.session_state["submitted_diners"] = {
+        int(diner_id): record for diner_id, record in normalized_state["submitted_diners"].items()
+    }
     st.session_state.setdefault("editing_diners", {})
 
 
+def persist_diner_submission(diner_id: int, record: dict) -> None:
+    with shared_state_lock():
+        state = read_shared_state_unlocked()
+        state["submitted_diners"][str(diner_id)] = record
+        write_shared_state_unlocked(state)
+        apply_shared_state_to_session(state)
+
+
+def persist_admin_settings(diner_count: int, diner_names: list[str], clear_submissions: bool) -> None:
+    with shared_state_lock():
+        state = read_shared_state_unlocked()
+        clean_names = [name.strip() or f"Diner {index + 1}" for index, name in enumerate(diner_names[:6])]
+        clean_names = (clean_names + default_diner_names())[:6]
+        names_changed = state["diner_names"] != clean_names
+        count_changed = state["diner_count"] != diner_count
+        state["diner_count"] = diner_count
+        state["diner_names"] = clean_names
+        if clear_submissions or names_changed or count_changed:
+            state["submitted_diners"] = {}
+        write_shared_state_unlocked(state)
+        apply_shared_state_to_session(state)
+
+
+def initialize_state() -> None:
+    apply_shared_state_to_session(load_shared_state())
+
+
 def reset_diner_choices() -> None:
-    st.session_state["submitted_diners"] = {}
+    with shared_state_lock():
+        state = read_shared_state_unlocked()
+        state["submitted_diners"] = {}
+        write_shared_state_unlocked(state)
+        apply_shared_state_to_session(state)
     st.session_state["editing_diners"] = {}
     for key in list(st.session_state.keys()):
         if re.match(r"^diner_\d+_", key):
             del st.session_state[key]
 
 
+def selected_restaurant_types(diner_id: int) -> tuple[str, ...]:
+    return tuple(
+        restaurant_type
+        for restaurant_type in TYPE_NAMES
+        if st.session_state.get(f"diner_{diner_id}_type_{restaurant_type}", False)
+    )
+
+
 def calculate_diner_profile(diner_id: int, diner_name: str) -> tuple[dict[str, int], list[str]]:
     profile: dict[str, int] = {}
     reasons: list[str] = []
 
-    selected_types = [
-        restaurant_type
-        for restaurant_type in TYPE_NAMES
-        if st.session_state.get(f"diner_{diner_id}_type_{restaurant_type}", False)
-    ]
+    selected_types = selected_restaurant_types(diner_id)
     for restaurant_type in selected_types:
         profile = add_profiles(profile, RESTAURANT_TYPES[restaurant_type], multiplier=4)
 
@@ -731,18 +875,18 @@ def diner_form(diner_id: int, diner_name: str) -> tuple[dict[str, int], list[str
                     )
 
             if st.form_submit_button(f"Submit {diner_name}'s picks", width="stretch"):
+                selected_types = selected_restaurant_types(diner_id)
+                if len(selected_types) > 3:
+                    st.error("Pick only 3 restaurant types before submitting.")
+                    return None
+
                 profile, reasons = calculate_diner_profile(diner_id, diner_name)
-                selected_types = tuple(
-                    restaurant_type
-                    for restaurant_type in TYPE_NAMES
-                    if st.session_state.get(f"diner_{diner_id}_type_{restaurant_type}", False)
-                )
-                submitted_diners[diner_id] = {
+                persist_diner_submission(diner_id, {
                     "name": diner_name,
                     "profile": profile,
                     "reasons": reasons,
-                    "types": selected_types,
-                }
+                    "types": list(selected_types),
+                })
                 editing_diners[diner_id] = False
                 st.rerun()
 
@@ -982,9 +1126,15 @@ submitted_diner_models: list[SubmittedDiner] = []
 
 st.header("Diner picks")
 st.caption("Only submitted diners count toward the results.")
-if st.button("Reset diner choices", type="secondary", width="stretch"):
-    reset_diner_choices()
-    st.rerun()
+refresh_column, reset_column = st.columns(2)
+with refresh_column:
+    if st.button("Refresh group results", type="secondary", width="stretch"):
+        initialize_state()
+        st.rerun()
+with reset_column:
+    if st.button("Reset diner choices", type="secondary", width="stretch"):
+        reset_diner_choices()
+        st.rerun()
 
 for diner in range(1, diner_count + 1):
     diner_name = diner_names[diner - 1] or f"Diner {diner}"
@@ -1063,13 +1213,11 @@ with st.expander("Admin", expanded=False):
             else:
                 st.error("I could not find restaurant names in the pasted list.")
 
-            old_count = st.session_state["diner_count"]
-            old_names = st.session_state["diner_names"]
-            st.session_state["diner_count"] = int(updated_count)
-            st.session_state["diner_names"] = [name or f"Diner {index + 1}" for index, name in enumerate(updated_names)]
-
-            if clear_submissions or old_count != int(updated_count) or old_names != st.session_state["diner_names"]:
-                st.session_state["submitted_diners"] = {}
+            persist_admin_settings(
+                int(updated_count),
+                [name or f"Diner {index + 1}" for index, name in enumerate(updated_names)],
+                clear_submissions,
+            )
 
             st.rerun()
 

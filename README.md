@@ -28,6 +28,9 @@ The bottom Admin section controls setup:
 - Diner cards start collapsed, can be reopened and resubmitted, and only count
   after that diner taps submit.
 - Submitted diners show a completed state and can edit their choices.
+- Submitted diner choices are shared across phones using server-side app state,
+  so one diner can submit from their phone and the group can tap Refresh group
+  results to see the latest picks.
 - Photo questions start unselected; skipped photos do not affect the algorithm.
 - Hard no's use a choose-any grid and only apply after that diner submits.
 - The reset button clears diner choices without touching the saved restaurant

@@ -1,3 +1,6 @@
 .pycache/
 __pycache__/
 .venv/
+data/shared_state.json
+data/shared_state.json.tmp
+data/shared_state.lock
