@@ -694,6 +694,7 @@ def persist_admin_settings(diner_count: int, diner_names: list[str], clear_submi
 
 def initialize_state() -> None:
     apply_shared_state_to_session(load_shared_state())
+    st.session_state.setdefault("admin_open", False)
 
 
 def reset_diner_choices() -> None:
@@ -1151,53 +1152,60 @@ else:
             st.write(f"Signals: {', '.join(restaurant.tags)}")
 
 st.divider()
-with st.expander("Admin", expanded=False):
-    st.write("Paste one restaurant per line. Add rough menu clues after a dash if you have them.")
-    st.caption("Example: Sushi Garden - sushi, ramen, bento")
+if st.button("Hide Admin" if st.session_state["admin_open"] else "Admin", type="secondary", width="stretch"):
+    st.session_state["admin_open"] = not st.session_state["admin_open"]
+    st.rerun()
 
-    with st.form("admin_form"):
-        updated_restaurants = st.text_area(
-            "Restaurant list",
-            value=restaurant_text_value(restaurant_names),
-            height=220,
-        )
-        updated_count = st.number_input(
-            "Number of diners",
-            min_value=1,
-            max_value=6,
-            value=st.session_state["diner_count"],
-            step=1,
-        )
+if st.session_state["admin_open"]:
+    with st.container(border=True):
+        st.markdown("### Admin")
+        st.write("Paste one restaurant per line. Add rough menu clues after a dash if you have them.")
+        st.caption("Example: Sushi Garden - sushi, ramen, bento")
 
-        updated_names: list[str] = []
-        for index in range(6):
-            updated_names.append(
-                st.text_input(
-                    f"Diner {index + 1} name",
-                    value=st.session_state["diner_names"][index],
-                    key=f"admin_name_{index}",
+        with st.form("admin_form"):
+            updated_restaurants = st.text_area(
+                "Restaurant list",
+                value=restaurant_text_value(restaurant_names),
+                height=220,
+            )
+            updated_count = st.number_input(
+                "Number of diners",
+                min_value=1,
+                max_value=6,
+                value=st.session_state["diner_count"],
+                step=1,
+            )
+
+            updated_names: list[str] = []
+            for index in range(6):
+                updated_names.append(
+                    st.text_input(
+                        f"Diner {index + 1} name",
+                        value=st.session_state["diner_names"][index],
+                        key=f"admin_name_{index}",
+                    )
                 )
-            )
 
-        clear_submissions = st.checkbox("Clear submitted diner picks", value=False)
+            clear_submissions = st.checkbox("Clear submitted diner picks", value=False)
 
-        if st.form_submit_button("Save admin settings", width="stretch"):
-            names = parse_restaurant_text(updated_restaurants)
-            if names:
-                save_restaurant_names(names)
-                st.success(f"Saved {len(names)} restaurants.")
-            else:
-                st.error("I could not find restaurant names in the pasted list.")
+            if st.form_submit_button("Save admin settings", width="stretch"):
+                names = parse_restaurant_text(updated_restaurants)
+                if not names:
+                    st.error("I could not find restaurant names in the pasted list.")
+                else:
+                    save_restaurant_names(names)
+                    st.success(f"Saved {len(names)} restaurants.")
 
-            persist_admin_settings(
-                int(updated_count),
-                [name or f"Diner {index + 1}" for index, name in enumerate(updated_names)],
-                clear_submissions,
-            )
+                    persist_admin_settings(
+                        int(updated_count),
+                        [name or f"Diner {index + 1}" for index, name in enumerate(updated_names)],
+                        clear_submissions,
+                    )
+                    st.session_state["admin_open"] = False
 
-            st.rerun()
+                    st.rerun()
 
-    st.caption(
-        "Prototype note: restaurant matching is menu-aware by inference. It reads cuisine and dish clues from names "
-        "or pasted details, then maps them to sensory traits."
-    )
+        st.caption(
+            "Prototype note: restaurant matching is menu-aware by inference. It reads cuisine and dish clues from names "
+            "or pasted details, then maps them to sensory traits."
+        )
