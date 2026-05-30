@@ -21,6 +21,10 @@ The bottom Admin section controls setup:
 - The app saves that list locally as `data/restaurants.txt`.
 - Until a new list is uploaded, the app keeps using the saved list.
 - Diner names and number of diners are customizable there too.
+- Diner cards start collapsed, can be reopened and resubmitted, and only count
+  after that diner taps submit.
+- The reset button clears diner choices without touching the saved restaurant
+  list.
 - Restaurant profiles are inferred from name, cuisine keywords, and any pasted
   menu hints.
 

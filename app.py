@@ -352,6 +352,13 @@ def initialize_state() -> None:
     st.session_state.setdefault("submitted_diners", {})
 
 
+def reset_diner_choices() -> None:
+    st.session_state["submitted_diners"] = {}
+    for key in list(st.session_state.keys()):
+        if re.match(r"^diner_\d+_", key):
+            del st.session_state[key]
+
+
 def calculate_diner_profile(diner_id: int, diner_name: str) -> tuple[dict[str, int], list[str]]:
     profile: dict[str, int] = {}
     reasons: list[str] = []
@@ -398,9 +405,16 @@ def calculate_diner_profile(diner_id: int, diner_name: str) -> tuple[dict[str, i
 def diner_form(diner_id: int, diner_name: str) -> tuple[dict[str, int], list[str]] | None:
     submitted_diners = st.session_state["submitted_diners"]
     submitted = submitted_diners.get(diner_id)
-    label = f"{diner_name} {'- submitted' if submitted else '- waiting'}"
+    label = (
+        f"{diner_name}, choices made - tap to edit"
+        if submitted
+        else f"{diner_name}, what are you craving to eat?"
+    )
 
-    with st.expander(label, expanded=diner_id == 1 and not submitted):
+    if submitted:
+        st.success(f"{diner_name} has made their choices.")
+
+    with st.expander(label, expanded=False):
         with st.form(f"diner_{diner_id}_form"):
             st.radio(
                 "Dinner mood",
@@ -435,7 +449,7 @@ def diner_form(diner_id: int, diner_name: str) -> tuple[dict[str, int], list[str
                     "profile": profile,
                     "reasons": reasons,
                 }
-                st.success(f"Got {diner_name}'s picks.")
+                st.rerun()
 
     refreshed = submitted_diners.get(diner_id)
     if refreshed:
@@ -569,6 +583,10 @@ submitted_profiles: list[dict[str, int]] = []
 
 st.header("Diner picks")
 st.caption("Only submitted diners count toward the results.")
+if st.button("Reset diner choices", type="secondary", width="stretch"):
+    reset_diner_choices()
+    st.rerun()
+
 for diner in range(1, diner_count + 1):
     diner_name = diner_names[diner - 1] or f"Diner {diner}"
     submitted = diner_form(diner, diner_name)
