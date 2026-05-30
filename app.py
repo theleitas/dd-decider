@@ -157,6 +157,43 @@ RESTAURANT_TYPES = {
 TYPE_NAMES = tuple(RESTAURANT_TYPES.keys())
 
 
+HARD_NO_TRAITS = {
+    "Too spicy": {"spicy": -8},
+    "Too bland": {"familiar": -2, "comfort": -1},
+    "Too heavy": {"hearty": -5, "indulgent": -5},
+    "Too light": {"light": -5, "salad": -4, "fresh": -2},
+    "Too greasy/fried": {"crunchy": -4, "indulgent": -4, "fast": -2},
+    "Seafood": {"seafood": -12, "raw_fish": -8, "premium": -2},
+    "Raw fish/sushi": {"raw_fish": -12, "seafood": -3, "premium": -3},
+    "Beef": {"beef": -10, "burger": -8, "smoky": -2},
+    "Pork": {"pork": -10, "smoky": -2},
+    "Chicken": {"chicken": -10, "protein": -1},
+    "Vegetarian-heavy": {"vegetable": -8, "salad": -5, "light": -2},
+    "Dairy-heavy": {"creamy": -6, "cheesy": -6, "indulgent": -2},
+    "Cheesy": {"cheesy": -8, "pizza": -4},
+    "Creamy": {"creamy": -8, "saucy": -2},
+    "Noodles or rice": {"carby": -4, "bowl": -2, "brothy": -2},
+    "Bread-heavy": {"carby": -4, "sandwich": -3, "handheld": -1},
+    "Sandwiches/handhelds": {"handheld": -7, "sandwich": -5, "fast": -1},
+    "Bowls": {"bowl": -7, "balanced": -2},
+    "Soup/broth": {"soup": -7, "brothy": -7},
+    "Salads": {"salad": -8, "fresh": -2, "light": -2},
+    "Breakfast food": {"breakfast": -8},
+    "Fast food": {"type_fast_food": -10, "fast": -4},
+    "Pizza": {"type_pizza": -10, "pizza": -8, "cheesy": -2},
+    "Burgers": {"type_burgers": -10, "burger": -8, "beef": -3},
+    "Mexican": {"type_mexican": -10, "spicy": -1},
+    "Italian": {"type_italian": -10, "carby": -2, "saucy": -1},
+    "Chinese": {"type_chinese": -10, "umami": -1},
+    "Japanese": {"type_japanese": -10, "raw_fish": -2, "seafood": -1},
+    "Thai": {"type_thai": -10, "spicy": -2, "saucy": -1},
+    "Greek/Mediterranean": {"type_greek": -10, "fresh": -1, "acidic": -1},
+    "BBQ/grill": {"type_grill": -10, "smoky": -6},
+    "Expensive": {"premium": -5, "budget": 4},
+    "Too adventurous": {"adventurous": -5, "familiar": 3},
+}
+
+
 FOOD_STYLES = [
     FoodStyle(
         "Thai or Vietnamese",
@@ -591,36 +628,20 @@ def calculate_diner_profile(diner_id: int, diner_name: str) -> tuple[dict[str, i
         profile = add_profiles(profile, {"hearty": 4, "protein": 2, "comfort": 1})
         reasons.append(f"{diner_name} needs real dinner energy.")
 
-    hard_nos = st.session_state.get(f"diner_{diner_id}_nos", [])
-    if "Too spicy" in hard_nos:
-        profile = add_profiles(profile, {"spicy": -8})
-    if "Too heavy" in hard_nos:
-        profile = add_profiles(profile, {"hearty": -5, "indulgent": -5})
-    if "Too greasy/fried" in hard_nos:
-        profile = add_profiles(profile, {"crunchy": -4, "indulgent": -4, "fast": -2})
-    if "Seafood" in hard_nos:
-        profile = add_profiles(profile, {"seafood": -12, "raw_fish": -8, "premium": -2})
-    if "Raw fish/sushi" in hard_nos:
-        profile = add_profiles(profile, {"raw_fish": -12, "seafood": -3, "premium": -3})
-    if "Beef" in hard_nos:
-        profile = add_profiles(profile, {"beef": -10, "hearty": -1, "smoky": -2})
-    if "Pork" in hard_nos:
-        profile = add_profiles(profile, {"pork": -10, "smoky": -2})
-    if "Chicken" in hard_nos:
-        profile = add_profiles(profile, {"chicken": -10, "protein": -1})
-    if "Dairy-heavy" in hard_nos:
-        profile = add_profiles(profile, {"creamy": -6, "cheesy": -6, "indulgent": -2})
-    if "Noodles or rice" in hard_nos:
-        profile = add_profiles(profile, {"carby": -4, "bowl": -2, "brothy": -2})
-    if "Sandwiches/handhelds" in hard_nos:
-        profile = add_profiles(profile, {"handheld": -7, "fast": -1})
-    if "Expensive" in hard_nos:
-        profile = add_profiles(profile, {"premium": -5, "budget": 4})
-    if "Too adventurous" in hard_nos:
-        profile = add_profiles(profile, {"adventurous": -5, "familiar": 3})
+    hard_nos = [
+        hard_no
+        for hard_no in HARD_NO_TRAITS
+        if st.session_state.get(f"diner_{diner_id}_hard_no_{hard_no}", False)
+    ]
+    for hard_no in hard_nos:
+        profile = add_profiles(profile, HARD_NO_TRAITS[hard_no])
+    if hard_nos:
+        reasons.append(f"{diner_name}'s hard no list: {', '.join(hard_nos)}.")
 
     for index, question in enumerate(QUESTIONS, start=1):
-        answer = st.session_state[f"diner_{diner_id}_question_{index}"]
+        answer = st.session_state.get(f"diner_{diner_id}_question_{index}")
+        if not answer:
+            continue
         selected = next(option for option in question.options if option.label == answer)
         profile = add_profiles(profile, selected.traits)
         reasons.append(f"{diner_name} chose {selected.label.lower()}.")
@@ -680,25 +701,12 @@ def diner_form(diner_id: int, diner_name: str) -> tuple[dict[str, int], list[str
                 key=f"diner_{diner_id}_mood",
             )
             st.slider("How hungry are you?", 1, 5, 3, key=f"diner_{diner_id}_hunger")
-            st.multiselect(
-                "Hard no's tonight",
-                [
-                    "Too spicy",
-                    "Too heavy",
-                    "Too greasy/fried",
-                    "Seafood",
-                    "Raw fish/sushi",
-                    "Beef",
-                    "Pork",
-                    "Chicken",
-                    "Dairy-heavy",
-                    "Noodles or rice",
-                    "Sandwiches/handhelds",
-                    "Expensive",
-                    "Too adventurous",
-                ],
-                key=f"diner_{diner_id}_nos",
-            )
+            st.markdown("#### Hard no's")
+            st.caption("Tap anything that is out tonight.")
+            hard_no_columns = st.columns(3)
+            for index, hard_no in enumerate(HARD_NO_TRAITS):
+                with hard_no_columns[index % 3]:
+                    st.checkbox(hard_no, key=f"diner_{diner_id}_hard_no_{hard_no}")
 
             st.markdown("#### Quick photo picks")
             for index, question in enumerate(QUESTIONS, start=1):
@@ -718,6 +726,7 @@ def diner_form(diner_id: int, diner_name: str) -> tuple[dict[str, int], list[str
                         [option.label for option in question.options],
                         horizontal=True,
                         key=f"diner_{diner_id}_question_{index}",
+                        index=None,
                         label_visibility="collapsed",
                     )
 
