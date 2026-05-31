@@ -660,7 +660,7 @@ def infer_restaurant_types(lower_name: str) -> tuple[str, ...]:
 
 
 def infer_restaurant(raw_name: str) -> Restaurant:
-    parts = [normalize_name(part) for part in re.split(r"\s+[|–—-]\s+|;", raw_name, maxsplit=1)]
+    parts = [normalize_name(part) for part in re.split(r"\s+[|–—-]\s+|:\s+|;", raw_name, maxsplit=1)]
     name = parts[0]
     details = " ".join(parts)
     lower_name = details.lower()
