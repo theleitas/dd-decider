@@ -35,7 +35,7 @@ BRAND_IMAGE_PATH = Path("assets/brand/leita-dining-decider.jpg")
 SOCIAL_PREVIEW_IMAGE_PATH = Path("static/leita-imessage-preview.jpg")
 SOCIAL_PREVIEW_IMAGE_URL = "https://raw.githubusercontent.com/theleitas/dd-decider/main/static/leita-imessage-preview.jpg"
 HTTP_HEADERS = {"User-Agent": "LeitaDiningDecider/1.0"}
-SHARED_STATE_VERSION = 2
+SHARED_STATE_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -146,7 +146,7 @@ RESTAURANT_TYPES = {
     "🍣 Japanese, Sushi & Hibachi": {"type_japanese_sushi_hibachi": 14, "fresh": 2, "umami": 3, "brothy": 1, "premium": 2, "seafood": 2},
     "🌶️ Thai & Asian": {"type_thai_asian": 14, "spicy": 3, "fresh": 2, "saucy": 2, "adventurous": 2, "umami": 2},
     "🦐 Seafood": {"type_seafood": 14, "seafood": 7, "premium": 2, "fresh": 3, "light": 2},
-    "🍳 Breakfast & Brunch": {"type_breakfast_brunch": 14, "breakfast": 6, "comfort": 2, "familiar": 2, "fresh": 1},
+    "🥩 Steakhouse": {"type_steakhouse": 14, "beef": 6, "protein": 5, "premium": 4, "upscale": 4, "hearty": 3, "special": 3},
     "🥪 Sandwiches & Deli": {"type_sandwiches_deli": 14, "sandwich": 6, "handheld": 5, "fast": 3, "familiar": 3},
     "🍖 Southern Comfort Food": {"type_southern_comfort": 14, "comfort": 6, "hearty": 4, "indulgent": 3, "chicken": 2, "familiar": 3},
     "🍽️ American Casual": {"type_american_casual": 14, "familiar": 5, "comfort": 3, "fast": 1, "variety": 2},
@@ -368,14 +368,14 @@ KNOWN_RESTAURANTS = {
 KNOWN_RESTAURANT_TYPES = {
     "chicken salad chick": ("🥪 Sandwiches & Deli", "🍽️ American Casual"),
     "chick-fil-a": ("🍗 Fried Chicken", "🥪 Sandwiches & Deli", "🍽️ American Casual"),
-    "panera": ("🥪 Sandwiches & Deli", "🍳 Breakfast & Brunch", "🍽️ American Casual"),
+    "panera": ("🥪 Sandwiches & Deli", "🍽️ American Casual"),
     "cava": ("🥙 Mediterranean & Greek",),
     "sweetgreen": ("🍽️ American Casual",),
     "chipotle": ("🌮 Mexican",),
     "jersey mike": ("🥪 Sandwiches & Deli",),
     "subway": ("🥪 Sandwiches & Deli",),
     "tropical smoothie": ("🥪 Sandwiches & Deli", "🍽️ American Casual"),
-    "first watch": ("🍳 Breakfast & Brunch", "🍽️ American Casual"),
+    "first watch": ("🍽️ American Casual",),
     "panda express": ("🥡 Chinese", "🌶️ Thai & Asian"),
     "five guys": ("🍟 Fast Food Burgers", "🍽️ American Casual"),
     "shake shack": ("🍔 Premium Burgers", "🍽️ American Casual"),
@@ -396,7 +396,7 @@ TYPE_KEYWORDS = {
     "🍣 Japanese, Sushi & Hibachi": ["japanese", "sushi", "ramen", "hibachi", "teriyaki", "poke", "udon", "bento"],
     "🌶️ Thai & Asian": ["thai", "pad thai", "curry", "basil", "lemongrass", "vietnam", "pho", "banh", "korean", "asian"],
     "🦐 Seafood": ["seafood", "fish", "shrimp", "crab", "lobster", "oyster", "poke"],
-    "🍳 Breakfast & Brunch": ["breakfast", "brunch", "egg", "pancake", "waffle", "biscuit", "first watch"],
+    "🥩 Steakhouse": ["steakhouse", "steak house", "steak", "filet", "ribeye", "sirloin", "longhorn", "outback", "ruth", "fleming", "capital grille", "texas roadhouse"],
     "🥪 Sandwiches & Deli": ["sub", "subs", "sandwich", "deli", "hoagie", "jersey mike", "subway", "panera", "chicken salad"],
     "🍖 Southern Comfort Food": ["southern", "soul food", "comfort", "meatloaf", "country", "cracker barrel", "bojangles"],
     "🍽️ American Casual": ["american", "diner", "bar", "cafe", "grill", "grille", "tavern", "applebee", "chili", "tgi friday"],
