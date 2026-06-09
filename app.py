@@ -26,6 +26,7 @@ from PIL import Image
 
 DATA_DIR = Path("data")
 RESTAURANT_LIST_PATH = DATA_DIR / "restaurants.txt"
+RESTAURANT_LIST_REPO_PATH = "data/restaurants.txt"
 LOGO_INDEX_PATH = DATA_DIR / "restaurant_logos.json"
 SHARED_STATE_PATH = DATA_DIR / "shared_state.json"
 SHARED_STATE_LOCK_PATH = DATA_DIR / "shared_state.lock"
@@ -35,7 +36,9 @@ BRAND_IMAGE_PATH = Path("assets/brand/leita-dining-decider.jpg")
 SOCIAL_PREVIEW_IMAGE_PATH = Path("static/leita-imessage-preview.jpg")
 SOCIAL_PREVIEW_IMAGE_URL = "https://raw.githubusercontent.com/theleitas/dd-decider/main/static/leita-imessage-preview.jpg"
 HTTP_HEADERS = {"User-Agent": "LeitaDiningDecider/1.0"}
-SHARED_STATE_VERSION = 3
+SHARED_STATE_VERSION = 4
+MIN_RESTAURANT_REPLACE_COUNT = 3
+RESTAURANT_REPLACE_CONFIRMATION = "SAVE RESTAURANTS"
 
 
 @dataclass(frozen=True)
@@ -123,21 +126,12 @@ QUESTIONS = [
             Option("Upscale", {"upscale": 6, "premium": 5, "special": 4, "adventurous": 1}, "q07_c_upscale.jpg"),
         ),
     ),
-    Question(
-        "Which flavor finish sounds better?",
-        (
-            Option("Glazed", {"sweet_savory": 5, "umami": 3, "comfort": 1}, "q08_a.jpg"),
-            Option("Herby", {"acidic": 5, "fresh": 3, "light": 1}, "q08_b.jpg"),
-            Option("Garlicky", {"garlic": 5, "umami": 3, "saucy": 1}, "q08_c.jpg"),
-        ),
-    ),
 ]
 
 
 RESTAURANT_TYPES = {
     "🍟 Fast Food Burgers": {"type_fast_food_burgers": 14, "burger": 5, "beef": 3, "fast": 5, "budget": 3, "handheld": 3, "familiar": 3},
     "🍔 Premium Burgers": {"type_premium_burgers": 14, "burger": 6, "beef": 4, "premium": 4, "upscale": 2, "indulgent": 4, "handheld": 3},
-    "🍗 Fried Chicken": {"type_fried_chicken": 14, "chicken": 6, "crunchy": 5, "fast": 3, "comfort": 4, "indulgent": 3},
     "🔥 Chicken Wings": {"type_chicken_wings": 14, "wing": 7, "chicken": 6, "shareable": 5, "spicy": 3, "crunchy": 3},
     "🍕 Pizza": {"type_pizza": 14, "carby": 3, "cheesy": 4, "shareable": 3, "familiar": 2},
     "🌮 Mexican": {"type_mexican": 14, "spicy": 2, "handheld": 2, "bowl": 2, "budget": 2},
@@ -181,7 +175,7 @@ HARD_NO_TRAITS = {
     "Soup/broth": {"soup": -7, "brothy": -7},
     "Salads": {"salad": -8, "fresh": -2, "light": -2},
     "Breakfast food": {"breakfast": -8},
-    "Fast food": {"type_fast_food_burgers": -10, "type_fried_chicken": -6, "fast": -4},
+    "Fast food": {"type_fast_food_burgers": -10, "fast": -4},
     "Pizza": {"type_pizza": -10, "pizza": -8, "cheesy": -2},
     "Burgers": {"type_fast_food_burgers": -10, "type_premium_burgers": -10, "burger": -8, "beef": -3},
     "Mexican": {"type_mexican": -10, "spicy": -1},
@@ -367,7 +361,7 @@ KNOWN_RESTAURANTS = {
 
 KNOWN_RESTAURANT_TYPES = {
     "chicken salad chick": ("🥪 Sandwiches & Deli", "🍽️ American Casual"),
-    "chick-fil-a": ("🍗 Fried Chicken", "🥪 Sandwiches & Deli", "🍽️ American Casual"),
+    "chick-fil-a": ("🥪 Sandwiches & Deli", "🍽️ American Casual"),
     "panera": ("🥪 Sandwiches & Deli", "🍽️ American Casual"),
     "cava": ("🥙 Mediterranean & Greek",),
     "sweetgreen": ("🍽️ American Casual",),
@@ -380,14 +374,13 @@ KNOWN_RESTAURANT_TYPES = {
     "five guys": ("🍟 Fast Food Burgers", "🍽️ American Casual"),
     "shake shack": ("🍔 Premium Burgers", "🍽️ American Casual"),
     "wingstop": ("🔥 Chicken Wings", "🍽️ American Casual"),
-    "zaxby": ("🍗 Fried Chicken", "🔥 Chicken Wings", "🍽️ American Casual"),
+    "zaxby": ("🔥 Chicken Wings", "🍽️ American Casual"),
 }
 
 
 TYPE_KEYWORDS = {
     "🍟 Fast Food Burgers": ["mcdonald", "wendy", "burger king", "whataburger", "sonic", "five guys", "cook out"],
     "🍔 Premium Burgers": ["shake shack", "burgerfi", "smashburger", "bad daddy", "burger boutique", "gourmet burger"],
-    "🍗 Fried Chicken": ["chick-fil-a", "popeyes", "kfc", "zaxby", "bojangles", "raising cane", "fried chicken", "chicken finger", "chicken tender"],
     "🔥 Chicken Wings": ["wing", "wings", "wingstop", "buffalo wild", "wild wing", "hot wing"],
     "🍕 Pizza": ["pizza", "pizzeria"],
     "🌮 Mexican": ["mexican", "taco", "burrito", "quesadilla", "taqueria", "cantina", "chipotle", "salsa"],
@@ -398,7 +391,7 @@ TYPE_KEYWORDS = {
     "🦐 Seafood": ["seafood", "fish", "shrimp", "crab", "lobster", "oyster", "poke"],
     "🥩 Steakhouse": ["steakhouse", "steak house", "steak", "filet", "ribeye", "sirloin", "longhorn", "outback", "ruth", "fleming", "capital grille", "texas roadhouse"],
     "🥪 Sandwiches & Deli": ["sub", "subs", "sandwich", "deli", "hoagie", "jersey mike", "subway", "panera", "chicken salad"],
-    "🍖 Southern Comfort Food": ["southern", "soul food", "comfort", "meatloaf", "country", "cracker barrel", "bojangles"],
+    "🍖 Southern Comfort Food": ["southern", "soul food", "comfort", "meatloaf", "country", "cracker barrel", "bojangles", "popeyes", "kfc", "fried chicken", "chicken finger", "chicken tender"],
     "🍽️ American Casual": ["american", "diner", "bar", "cafe", "grill", "grille", "tavern", "applebee", "chili", "tgi friday"],
     "♨️ Barbecue": ["bbq", "barbecue", "smokehouse", "smoked", "brisket", "ribs"],
     "🍛 Indian": ["indian", "curry", "biryani", "tandoor", "masala", "naan", "punjab", "bombay"],
@@ -476,9 +469,81 @@ def parse_restaurant_text(text: str, filename: str = "restaurants.txt") -> list[
     return [normalize_name(line) for line in text.splitlines() if normalize_name(line)]
 
 
-def save_restaurant_names(names: list[str]) -> None:
+def restaurant_list_file_text(names: list[str]) -> str:
+    return "\n".join(dict.fromkeys(names)) + "\n"
+
+
+def secret_value(name: str, default: str = "") -> str:
+    try:
+        value = st.secrets.get(name, default)
+    except (FileNotFoundError, KeyError):
+        return default
+    return str(value) if value else default
+
+
+def github_request_json(method: str, url: str, token: str, payload: dict | None = None) -> tuple[dict | None, str | None]:
+    data = json.dumps(payload).encode("utf-8") if payload else None
+    request = urllib.request.Request(
+        url,
+        data=data,
+        method=method,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "User-Agent": "LeitaDiningDecider/1.0",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return json.loads(response.read().decode("utf-8")), None
+    except urllib.error.HTTPError as error:
+        if method == "GET" and error.code == 404:
+            return None, None
+        detail = error.read().decode("utf-8", errors="ignore")
+        return None, f"GitHub API returned {error.code}: {detail[:240]}"
+    except (OSError, urllib.error.URLError, TimeoutError) as error:
+        return None, f"GitHub API request failed: {error}"
+
+
+def commit_restaurant_names_to_github(names: list[str]) -> tuple[bool, str]:
+    token = secret_value("GITHUB_TOKEN")
+    if not token:
+        return False, "GitHub durable save is not configured. Add GITHUB_TOKEN to Streamlit secrets."
+
+    repo = secret_value("GITHUB_REPO", "theleitas/dd-decider")
+    branch = secret_value("GITHUB_BRANCH", "main")
+    encoded_path = urllib.parse.quote(RESTAURANT_LIST_REPO_PATH)
+    base_url = f"https://api.github.com/repos/{repo}/contents/{encoded_path}"
+
+    existing, error = github_request_json("GET", f"{base_url}?ref={urllib.parse.quote(branch)}", token)
+    if error:
+        return False, error
+
+    payload = {
+        "message": "Update locked restaurant list",
+        "content": base64.b64encode(restaurant_list_file_text(names).encode("utf-8")).decode("ascii"),
+        "branch": branch,
+    }
+    if existing and existing.get("sha"):
+        payload["sha"] = existing["sha"]
+
+    _result, error = github_request_json("PUT", base_url, token, payload)
+    if error:
+        return False, error
+    return True, f"Committed {RESTAURANT_LIST_REPO_PATH} to {repo}@{branch}."
+
+
+def save_restaurant_names(names: list[str]) -> tuple[int, bool, str]:
+    unique_names = list(dict.fromkeys(names))
+    durable_saved, durable_message = commit_restaurant_names_to_github(unique_names)
+    if not durable_saved:
+        return len(unique_names), durable_saved, durable_message
+
     DATA_DIR.mkdir(exist_ok=True)
-    RESTAURANT_LIST_PATH.write_text("\n".join(dict.fromkeys(names)) + "\n", encoding="utf-8")
+    RESTAURANT_LIST_PATH.write_text(restaurant_list_file_text(unique_names), encoding="utf-8")
+    return len(unique_names), durable_saved, durable_message
 
 
 def load_restaurant_names() -> list[str]:
@@ -906,18 +971,6 @@ def calculate_diner_profile(diner_id: int, diner_name: str) -> tuple[dict[str, i
         clean_types = ", ".join(restaurant_type.split(" ", 1)[1] for restaurant_type in selected_types)
         reasons.append(f"{diner_name}'s top restaurant types are {clean_types}.")
 
-    mood = st.session_state[f"diner_{diner_id}_mood"]
-    mood_traits = {
-        "Tired": {"comfort": 3, "fast": 2, "familiar": 1},
-        "Stressed": {"comfort": 3, "familiar": 2},
-        "Happy": {"fresh": 2, "adventurous": 1},
-        "Restless": {"adventurous": 3, "spicy": 1},
-        "Focused": {"light": 2, "fresh": 1, "individual": 1},
-        "Indulgent": {"hearty": 3, "comfort": 2, "indulgent": 3},
-    }
-    profile = add_profiles(profile, mood_traits[mood])
-    reasons.append(f"{diner_name} is feeling {mood.lower()}.")
-
     hunger = st.session_state[f"diner_{diner_id}_hunger"]
     if hunger <= 2:
         profile = add_profiles(profile, {"light": 3, "fresh": 1})
@@ -992,12 +1045,6 @@ def diner_form(diner_id: int, diner_name: str) -> tuple[dict[str, int], list[str
         st.caption("Choose up to 3. These carry the most weight.")
 
         with st.form(f"diner_{diner_id}_form"):
-            st.radio(
-                "Dinner mood",
-                ["Tired", "Stressed", "Happy", "Restless", "Focused", "Indulgent"],
-                horizontal=True,
-                key=f"diner_{diner_id}_mood",
-            )
             st.slider("How hungry are you?", 1, 5, 3, key=f"diner_{diner_id}_hunger")
             st.markdown("#### Hard no's")
             st.caption("Tap anything that is out tonight.")
@@ -1367,6 +1414,11 @@ if st.session_state["admin_open"]:
                 value=restaurant_text_value(restaurant_names),
                 height=220,
             )
+            replace_restaurants = st.checkbox("Replace the locked restaurant list", value=False)
+            replacement_confirmation = st.text_input(
+                f'Type "{RESTAURANT_REPLACE_CONFIRMATION}" to confirm restaurant replacement',
+                value="",
+            )
             updated_count = st.number_input(
                 "Number of diners",
                 min_value=1,
@@ -1392,19 +1444,36 @@ if st.session_state["admin_open"]:
                 if not names:
                     st.error("I could not find restaurant names in the pasted list.")
                 else:
-                    save_restaurant_names(names)
-                    with st.spinner("Saving restaurants and checking for logos..."):
-                        logo_count = update_restaurant_logos(names)
-                    st.success(f"Saved {len(names)} restaurants. Cached {logo_count} new logos.")
+                    restaurant_list_changed = names != restaurant_names
+                    if restaurant_list_changed and len(names) < MIN_RESTAURANT_REPLACE_COUNT:
+                        st.error(f"Restaurant replacement requires at least {MIN_RESTAURANT_REPLACE_COUNT} restaurants.")
+                    elif restaurant_list_changed and not replace_restaurants:
+                        st.error("Check the replace box before overwriting the locked restaurant list.")
+                    elif restaurant_list_changed and replacement_confirmation.strip() != RESTAURANT_REPLACE_CONFIRMATION:
+                        st.error(f'Type "{RESTAURANT_REPLACE_CONFIRMATION}" before overwriting the locked restaurant list.')
+                    else:
+                        if restaurant_list_changed:
+                            with st.spinner("Saving locked restaurant list to GitHub and checking for logos..."):
+                                saved_count, durable_saved, durable_message = save_restaurant_names(names)
+                                if durable_saved:
+                                    logo_count = update_restaurant_logos(names)
+                                else:
+                                    logo_count = 0
+                            if not durable_saved:
+                                st.error(durable_message)
+                                st.stop()
+                            st.success(f"Saved {saved_count} restaurants. Cached {logo_count} new logos.")
+                        else:
+                            st.info("Restaurant list unchanged.")
 
-                    persist_admin_settings(
-                        int(updated_count),
-                        [name or f"Diner {index + 1}" for index, name in enumerate(updated_names)],
-                        clear_submissions,
-                    )
-                    st.session_state["admin_open"] = False
+                        persist_admin_settings(
+                            int(updated_count),
+                            [name or f"Diner {index + 1}" for index, name in enumerate(updated_names)],
+                            clear_submissions,
+                        )
+                        st.session_state["admin_open"] = False
 
-                    st.rerun()
+                        st.rerun()
 
         st.caption(
             "Prototype note: restaurant matching is menu-aware by inference. It reads cuisine and dish clues from names "

@@ -22,8 +22,12 @@ photo questions refine the group consensus.
 The bottom Admin section controls setup:
 
 - Paste a restaurant list into the Admin section.
-- The app saves that list locally as `data/restaurants.txt`.
-- Until a new list is uploaded, the app keeps using the saved list.
+- The app stores the locked restaurant list as `data/restaurants.txt`.
+- Restaurant replacement requires the Admin replace checkbox and the exact
+  confirmation phrase `SAVE RESTAURANTS`.
+- Durable in-app restaurant saves require Streamlit secrets: `GITHUB_TOKEN`,
+  with optional `GITHUB_REPO` and `GITHUB_BRANCH` overrides.
+- Until a confirmed new list is saved, the app keeps using the locked list.
 - Diner names and number of diners are customizable there too.
 - Diner cards start collapsed, can be reopened and resubmitted, and only count
   after that diner taps submit.
