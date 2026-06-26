@@ -25,8 +25,10 @@ The bottom Admin section controls setup:
 - The app stores the locked restaurant list as `data/restaurants.txt`.
 - Restaurant replacement requires the Admin replace checkbox and the exact
   confirmation phrase `SAVE RESTAURANTS`.
-- Durable in-app restaurant saves require Streamlit secrets: `GITHUB_TOKEN`,
-  with optional `GITHUB_REPO` and `GITHUB_BRANCH` overrides.
+- Confirmed saves update the running app immediately.
+- Reboot/code-update durability requires Streamlit secrets: `GITHUB_TOKEN`, with
+  optional `GITHUB_REPO` and `GITHUB_BRANCH` overrides, so the app can commit the
+  locked file back to GitHub.
 - Until a confirmed new list is saved, the app keeps using the locked list.
 - Diner names and number of diners are customizable there too.
 - Diner cards start collapsed, can be reopened and resubmitted, and only count

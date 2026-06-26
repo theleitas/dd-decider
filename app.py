@@ -7,6 +7,7 @@ import hashlib
 import html
 import io
 import json
+import os
 import re
 import urllib.error
 import urllib.parse
@@ -474,8 +475,19 @@ def restaurant_list_file_text(names: list[str]) -> str:
 
 
 def secret_value(name: str, default: str = "") -> str:
+    env_value = os.environ.get(name) or os.environ.get(name.lower())
+    if env_value:
+        return env_value
+
     try:
         value = st.secrets.get(name, default)
+        if not value:
+            value = st.secrets.get(name.lower(), default)
+        if not value and "." in name:
+            section, key = name.split(".", 1)
+            value = st.secrets.get(section, {}).get(key, default)
+        if not value and name.startswith("GITHUB_"):
+            value = st.secrets.get("github", {}).get(name.removeprefix("GITHUB_").lower(), default)
     except (FileNotFoundError, KeyError):
         return default
     return str(value) if value else default
@@ -537,12 +549,9 @@ def commit_restaurant_names_to_github(names: list[str]) -> tuple[bool, str]:
 
 def save_restaurant_names(names: list[str]) -> tuple[int, bool, str]:
     unique_names = list(dict.fromkeys(names))
-    durable_saved, durable_message = commit_restaurant_names_to_github(unique_names)
-    if not durable_saved:
-        return len(unique_names), durable_saved, durable_message
-
     DATA_DIR.mkdir(exist_ok=True)
     RESTAURANT_LIST_PATH.write_text(restaurant_list_file_text(unique_names), encoding="utf-8")
+    durable_saved, durable_message = commit_restaurant_names_to_github(unique_names)
     return len(unique_names), durable_saved, durable_message
 
 
@@ -1333,6 +1342,12 @@ with st.container(border=True):
 restaurant_names = load_restaurant_names()
 diner_count = st.session_state["diner_count"]
 diner_names = st.session_state["diner_names"]
+restaurant_save_notice = st.session_state.pop("restaurant_save_notice", None)
+if restaurant_save_notice:
+    if restaurant_save_notice["level"] == "warning":
+        st.warning(restaurant_save_notice["message"])
+    else:
+        st.success(restaurant_save_notice["message"])
 
 group_profile: dict[str, int] = {}
 group_reasons: list[str] = []
@@ -1455,14 +1470,21 @@ if st.session_state["admin_open"]:
                         if restaurant_list_changed:
                             with st.spinner("Saving locked restaurant list to GitHub and checking for logos..."):
                                 saved_count, durable_saved, durable_message = save_restaurant_names(names)
-                                if durable_saved:
-                                    logo_count = update_restaurant_logos(names)
-                                else:
-                                    logo_count = 0
+                                logo_count = update_restaurant_logos(names)
                             if not durable_saved:
-                                st.error(durable_message)
-                                st.stop()
-                            st.success(f"Saved {saved_count} restaurants. Cached {logo_count} new logos.")
+                                st.session_state["restaurant_save_notice"] = {
+                                    "level": "warning",
+                                    "message": (
+                                        f"Saved {saved_count} restaurants to this running app and cached {logo_count} "
+                                        "new logos. For reboot/code-update durability, configure GitHub persistence. "
+                                        f"Details: {durable_message}"
+                                    ),
+                                }
+                            else:
+                                st.session_state["restaurant_save_notice"] = {
+                                    "level": "success",
+                                    "message": f"Saved {saved_count} restaurants to GitHub. Cached {logo_count} new logos.",
+                                }
                         else:
                             st.info("Restaurant list unchanged.")
 
